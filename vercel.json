@@ -5,8 +5,12 @@
   "installCommand": "npm ci --include=dev",
   "rewrites": [
     {
-      "source": "/auth/:path*",
-      "destination": "/api/auth/:path*"
+      "source": "/auth/github/callback",
+      "destination": "/api/auth/github/callback"
+    },
+    {
+      "source": "/auth/github",
+      "destination": "/api/auth/github"
     },
     {
       "source": "/((?!api|auth|assets|.*\\.[^/]+$).*)",

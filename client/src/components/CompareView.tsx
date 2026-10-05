@@ -23,7 +23,7 @@ function CompareColumn({ title, data }: { title: string; data: Dashboard }) {
 }
 
 export function CompareView({ initialLeft, initialRight }: { initialLeft: string; initialRight: string }) {
-  const [left, setLeft] = useState(initialLeft || 'octocat')
+  const [left, setLeft] = useState(initialLeft || 'cgupta21')
   const [right, setRight] = useState(initialRight || 'torvalds')
   const [result, setResult] = useState<CompareResponse | null>(null)
   const [loading, setLoading] = useState(false)

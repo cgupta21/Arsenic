@@ -580,6 +580,38 @@ app.get('/api/me', (req, res) => {
 app.get('/api/search-history', (_req, res) => {
   res.json({ enabled: false })
 })
+app.post('/api/search/consume', (req, res) => {
+  // Logged-in users have unlimited searches.
+  if (req.session?.githubUser) {
+    return res.json({
+      allowed: true,
+      remaining: null,
+      authenticated: true
+    })
+  }
+
+  const limit = 3
+  const used = Number(req.session?.guestSearches || 0)
+
+  if (used >= limit) {
+    return res.status(403).json({
+      allowed: false,
+      remaining: 0,
+      authenticated: false,
+      requiresLogin: true,
+      error: 'Guest search limit reached. Please sign in with GitHub to continue.'
+    })
+  }
+
+  const nextUsed = used + 1
+  req.session.guestSearches = nextUsed
+
+  return res.json({
+    allowed: true,
+    remaining: limit - nextUsed,
+    authenticated: false
+  })
+})
 
 app.post('/api/search/consume', (req, res) => {
   if (req.session?.githubUser) {

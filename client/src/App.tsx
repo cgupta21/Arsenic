@@ -15,7 +15,7 @@ import { ScoreBreakdown } from './components/ScoreBreakdown'
 import { TimingPatterns } from './components/TimingPatterns'
 import { CompareView } from './components/CompareView'
 
-const fallbackUser = 'octocat'
+const fallbackUser = 'cgupta21'
 
 function routeState() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'

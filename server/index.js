@@ -713,7 +713,19 @@ app.get('/auth/github', (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID
   if (!clientId) return res.status(501).send('GitHub OAuth is not configured.')
   const state = crypto.randomBytes(24).toString('hex')
-  req.session.oauthState = state
+  // Create a signed state token to prevent tampering
+  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
+  const signedState = `${state}.${signature}`
+  // Set cookie (10 minutes maxAge)
+  const cookieParts = [
+    `oauth_state=${signedState}`,
+    'HttpOnly',
+    'Path=/',
+    'Max-Age=600',
+    'SameSite=Lax',
+    isProd ? 'Secure' : ''
+  ].filter(Boolean)
+  res.setHeader('Set-Cookie', cookieParts.join('; '))
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: process.env.GITHUB_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/github/callback`,
@@ -723,11 +735,31 @@ app.get('/auth/github', (req, res) => {
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
 })
 
+
+
 app.get('/auth/github/callback', async (req, res) => {
   const { code, state } = req.query
-  if (!code || !state || state !== req.session.oauthState) return res.status(400).send('Invalid OAuth state.')
-  delete req.session.oauthState
+  // Retrieve and verify signed state from cookie
+  const cookieHeader = req.headers.cookie || ''
+  const match = cookieHeader.match(/oauth_state=([^;]+)/)
+  const signedState = match ? decodeURIComponent(match[1]) : ''
+  // Clear the cookie early (whether valid or not)
+  const clearParts = [
+    'oauth_state=; HttpOnly',
+    'Path=/',
+    'Max-Age=0',
+    isProd ? 'Secure' : ''
+  ].filter(Boolean)
+  res.setHeader('Set-Cookie', clearParts.join('; '))
+  if (!signedState) return res.status(400).send('Invalid OAuth state.')
+  const [originalState, signature] = signedState.split('.')
+  const expectedSig = crypto.createHmac('sha256', sessionSecret).update(originalState).digest('hex')
+  if (state !== originalState || signature !== expectedSig) {
+    return res.status(400).send('Invalid OAuth state.')
+  }
+  // Proceed with OAuth token exchange as before
 
+  // `code` and `state` have been validated above
   try {
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',

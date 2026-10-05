@@ -726,13 +726,18 @@ app.post('/auth/logout', (req, res) => {
 })
 
 const distPath = path.resolve(__dirname, '../client/dist')
-app.use(express.static(distPath))
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
-  res.sendFile(path.join(distPath, 'index.html'), (error) => {
-    if (error) next()
+
+// Local development serves the built frontend from Express. On Vercel, the
+// frontend is served by Vercel and this Express app is exposed as a function.
+if (process.env.VERCEL !== '1') {
+  app.use(express.static(distPath))
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
+    res.sendFile(path.join(distPath, 'index.html'), (error) => {
+      if (error) next()
+    })
   })
-})
+}
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled server error:', err)
@@ -740,9 +745,13 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' })
 })
 
-app.listen(PORT, () => {
-  console.log(`Arsenic API running at http://localhost:${PORT}`)
-  console.log(defaultToken ? 'GitHub authentication: ENABLED' : 'GitHub authentication: DISABLED — public API rate limit applies')
-  console.log('Developer summary: ENABLED (deterministic, no external AI key required)')
-  console.log(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? 'GitHub OAuth: ENABLED' : 'GitHub OAuth: DISABLED')
-})
+export default app
+
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`Arsenic API running at http://localhost:${PORT}`)
+    console.log(defaultToken ? 'GitHub authentication: ENABLED' : 'GitHub authentication: DISABLED — public API rate limit applies')
+    console.log('Developer summary: ENABLED (deterministic, no external AI key required)')
+    console.log(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET ? 'GitHub OAuth: ENABLED' : 'GitHub OAuth: DISABLED')
+  })
+}

@@ -1,7 +1,9 @@
 import app from '../server/index.js'
 
 export default function handler(req, res) {
-  if (req.url?.startsWith('/api/')) {
+  // Only auth routes need /api removed because Vercel
+  // rewrites /auth/* to /api/auth/*
+  if (req.url?.startsWith('/api/auth/')) {
     req.url = req.url.replace(/^\/api/, '')
   }
 

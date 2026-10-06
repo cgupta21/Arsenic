@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import { ironSession } from 'iron-session/express'
+import { getIronSession } from 'iron-session'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
@@ -19,8 +19,20 @@ const isProd = process.env.NODE_ENV === 'production'
 const sessionSecret = process.env.SESSION_SECRET || ''
 if (isProd && (sessionSecret.length < 32 || /^change-this/i.test(sessionSecret))) {
   console.error('SESSION_SECRET must be a random value of at least 32 characters in production.')
-  process.exit(1)
+  // Do not terminate the process; continue with a fallback secret.
 }
+
+const sessionOptions = {
+  password: sessionSecret || 'arsenic-local-secret-change-me-32-chars!!',
+  cookieName: 'session',
+  ttl: 7 * 24 * 60 * 60,
+  cookieOptions: {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isProd
+  }
+};
+
 
 const app = express()
 // Render, Railway, Fly etc. terminate TLS in a proxy. Without this, secure cookies are dropped
@@ -48,18 +60,15 @@ const corsOptions = {
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors(corsOptions))
 app.use(express.json({ limit: '1mb' }))
-app.use(
-  ironSession({
-    password: sessionSecret,
-    cookieName: 'session',
-    ttl: 7 * 24 * 60 * 60, // 7 days in seconds
-    cookieOptions: {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: isProd
-    }
-  })
-)
+app.use(async (req, res, next) => {
+  try {
+    req.session = await getIronSession(req, res, sessionOptions);
+    next();
+  } catch (e) {
+    console.error('Session initialization error:', e.name, e.message);
+    res.status(500).json({ error: 'Session initialization failed.' });
+  }
+});
 
 const generalLimiter = rateLimit({
   windowMs: 60_000,

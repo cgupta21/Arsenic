@@ -42,15 +42,8 @@ function useRoute() {
   return route
 }
 
-function useTheme() {
-  const [dark, setDark] = useState(() => {
-    const stored = localStorage.getItem('arsenic-theme')
-    if (stored) return stored === 'dark'
-    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? true
-  })
-  useEffect(() => localStorage.setItem('arsenic-theme', dark ? 'dark' : 'light'), [dark])
-  return [dark, setDark] as const
-}
+// Theme handling removed; always using original dark theme
+// No useTheme hook needed
 
 function useRecentSearches() {
   const [items, setItems] = useState<string[]>(() => {
@@ -66,7 +59,7 @@ function useRecentSearches() {
 
 export default function App() {
   const route = useRoute()
-  const [dark, setDark] = useTheme()
+  const dark = true // always dark theme
   const recent = useRecentSearches()
   const [query, setQuery] = useState(route.username || fallbackUser)
   const [menu, setMenu] = useState(false)
@@ -112,7 +105,7 @@ export default function App() {
   }
 
   return (
-    <div className={dark ? 'app dark' : 'app light'}>
+    <div className='app dark'>
       <header className="topbar">
         <button className="brand brandButton" onClick={() => pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)} aria-label="Go to Arsenic home">
           <img className="brandLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" />
@@ -125,9 +118,7 @@ export default function App() {
           <button onClick={() => pushRoute('/compare')}>Compare</button>
         </nav>
         <div className="actions">
-          <button className="iconBtn" onClick={() => setDark((value) => !value)} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'} title="Toggle theme">
-            {dark ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
+
           {sessionUser ? (
             <button className="accountBtn" onClick={signOut} title={`Sign out @${sessionUser.login}`}><img src={sessionUser.avatar_url} alt="" /><LogOut size={15} /></button>
           ) : (

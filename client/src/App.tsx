@@ -180,7 +180,8 @@ export default function App() {
 
       <footer>
         <div className="brand"><img className="brandLogo footerLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" /></div>
-        <span>GitHub developer intelligence · server-side API proxy · secrets stay out of the browser</span>
+        <span>Arsenic · GitHub Developer Intelligence</span>
+        <span>Built by cgupta21 · <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">GitHub ↗</a></span>
       </footer>
     </div>
   )

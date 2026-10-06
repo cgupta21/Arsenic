@@ -25,6 +25,7 @@
     "express-session": "^1.18.1",
     "helmet": "^8.1.0",
     "html2canvas": "^1.4.1",
+    "iron-session": "^9.0.1",
     "jspdf": "^3.0.3",
     "lucide-react": "^0.468.0",
     "memorystore": "^1.6.8",

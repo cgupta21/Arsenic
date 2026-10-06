@@ -3,8 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
-import session from 'express-session'
-import createMemoryStore from 'memorystore'
+import { ironSession } from 'iron-session/express'
 import crypto from 'node:crypto'
 import path from 'node:path'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
@@ -14,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const MemoryStore = createMemoryStore(session)
+
 const isProd = process.env.NODE_ENV === 'production'
 
 const sessionSecret = process.env.SESSION_SECRET || ''
@@ -49,18 +48,18 @@ const corsOptions = {
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors(corsOptions))
 app.use(express.json({ limit: '1mb' }))
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'arsenic-local-secret-change-me',
-  store: new MemoryStore({ checkPeriod: 60 * 60 * 1000 }),
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: isProd,
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  }
-}))
+app.use(
+  ironSession({
+    password: sessionSecret,
+    cookieName: 'session',
+    ttl: 7 * 24 * 60 * 60, // 7 days in seconds
+    cookieOptions: {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: isProd
+    }
+  })
+)
 
 const generalLimiter = rateLimit({
   windowMs: 60_000,
@@ -778,6 +777,7 @@ app.get('/auth/github/callback', async (req, res) => {
     const user = await userResponse.json()
     req.session.githubAccessToken = tokenBody.access_token
     req.session.githubUser = { login: user.login, name: user.name, avatar_url: user.avatar_url }
+    await req.session.save()
     res.redirect(clientOrigins[0])
   } catch (error) {
     console.error('OAuth callback error:', error)
@@ -785,8 +785,9 @@ app.get('/auth/github/callback', async (req, res) => {
   }
 })
 
-app.post('/auth/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }))
+app.post('/auth/logout', async (req, res) => {
+  await req.session.destroy()
+  res.json({ ok: true })
 })
 
 const distPath = path.resolve(__dirname, '../client/dist')

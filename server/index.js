@@ -582,6 +582,7 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.get('/api/me', (req, res) => {
+  res.set('Cache-Control', 'no-store')
   res.json({ user: req.session?.githubUser || null })
 })
 
@@ -795,8 +796,25 @@ app.get('/auth/github/callback', async (req, res) => {
 })
 
 app.post('/auth/logout', async (req, res) => {
-  await req.session.destroy()
-  res.json({ ok: true })
+  try {
+    await req.session.destroy()
+    // iron-session's destroy() clears the session data but does NOT expire the browser cookie.
+    // We must explicitly overwrite the cookie with Max-Age=0 so the browser removes it.
+    // Use the exact same cookie name and attributes as sessionOptions so the browser matches it.
+    const clearCookieParts = [
+      `${sessionOptions.cookieName}=; Max-Age=0`,
+      'Path=/',
+      'HttpOnly',
+      `SameSite=${sessionOptions.cookieOptions.sameSite === 'lax' ? 'Lax' : sessionOptions.cookieOptions.sameSite}`,
+      sessionOptions.cookieOptions.secure ? 'Secure' : ''
+    ].filter(Boolean)
+    res.setHeader('Set-Cookie', clearCookieParts.join('; '))
+    res.set('Cache-Control', 'no-store')
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('Logout error:', error)
+    res.status(500).json({ ok: false, error: 'Logout failed.' })
+  }
 })
 
 const distPath = path.resolve(__dirname, '../client/dist')

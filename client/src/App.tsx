@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import {
   Activity, ArrowUpRight, BarChart3, CalendarDays, CheckCircle2,
   CircleDot, Code2, GitBranch, Github, GitPullRequest, Globe2, LogIn, LogOut, Menu,
-  Moon, Search, Sparkles, Star, Sun, Users, X,
+  Search, Sparkles, Star, Users, X,
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Dashboard } from './types'
@@ -65,9 +65,24 @@ export default function App() {
   const [menu, setMenu] = useState(false)
   const [sessionUser, setSessionUser] = useState<{ login: string; name: string | null; avatar_url: string } | null>(null)
   const [loginPrompt, setLoginPrompt] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [loggingOut, setLoggingOut] = useState(false)
+  // Generation counter to prevent stale /api/me from restoring auth after logout
+  const meGenRef = useRef(0)
 
   useEffect(() => { setQuery(route.username || query) }, [route.username])
-  useEffect(() => { void getSessionUser().then(({ user }) => setSessionUser(user)).catch(() => setSessionUser(null)) }, [])
+
+  const loadSessionUser = useCallback(async () => {
+    const gen = ++meGenRef.current
+    try {
+      const { user } = await getSessionUser()
+      if (gen === meGenRef.current) setSessionUser(user)
+    } catch {
+      if (gen === meGenRef.current) setSessionUser(null)
+    }
+  }, [])
+
+  useEffect(() => { void loadSessionUser() }, [loadSessionUser])
   useEffect(() => {
     document.title = route.mode === 'compare' ? 'Arsenic — Compare Developers' : route.username ? `Arsenic — @${route.username}` : 'Arsenic — Developer Intelligence'
   }, [route])
@@ -100,8 +115,31 @@ export default function App() {
   }
 
   const signOut = async () => {
-    await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
-    setSessionUser(null)
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      const response = await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
+      if (!response.ok) throw new Error('Server returned an error during logout.')
+      // Cancel any in-flight /api/me that could race and restore auth state
+      meGenRef.current += 1
+      setSessionUser(null)
+      // Re-verify server confirms logged out
+      const gen = ++meGenRef.current
+      try {
+        const { user } = await getSessionUser()
+        // Only apply if no newer call has started (e.g. a re-login)
+        if (gen === meGenRef.current && user !== null) {
+          console.warn('Logout verification: /api/me still returned a user — forcing null.')
+          setSessionUser(null)
+        }
+      } catch { /* verification fetch failed; session was still cleared */ }
+      setToast({ message: 'Signed out successfully.', type: 'success' })
+    } catch (error) {
+      console.error('Sign-out failed:', error)
+      setToast({ message: 'Could not sign out. Please try again.', type: 'error' })
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
@@ -120,7 +158,7 @@ export default function App() {
         <div className="actions">
 
           {sessionUser ? (
-            <button className="accountBtn" onClick={signOut} title={`Sign out @${sessionUser.login}`}><img src={sessionUser.avatar_url} alt="" /><LogOut size={15} /></button>
+            <button className="accountBtn" onClick={signOut} disabled={loggingOut} title={loggingOut ? 'Signing out…' : `Sign out @${sessionUser.login}`}><img src={sessionUser.avatar_url} alt="" /><LogOut size={15} /></button>
           ) : (
             <a className="outlineBtn authBtn" href="/auth/github" title="Sign in with GitHub"><Github size={15} />Sign in</a>
           )}
@@ -177,6 +215,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
       <footer>
         <div className="brand"><img className="brandLogo footerLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" /></div>
@@ -374,3 +414,21 @@ function Card({ title, icon, action, children }: { title: string; icon: ReactNod
 }
 
 function Empty({ text }: { text: string }) { return <div className="empty">{text}</div> }
+
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
+  useEffect(() => {
+    const id = setTimeout(onClose, 3000)
+    return () => clearTimeout(id)
+  }, [onClose])
+  return (
+    <div
+      className={`toast toast--${type}`}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <span>{message}</span>
+      <button className="toastClose" onClick={onClose} aria-label="Dismiss notification"><X size={13} /></button>
+    </div>
+  )
+}

@@ -13,6 +13,10 @@
       "destination": "/api/auth/github"
     },
     {
+      "source": "/auth/logout",
+      "destination": "/api/auth/logout"
+    },
+    {
       "source": "/((?!api|auth|assets|.*\\.[^/]+$).*)",
       "destination": "/index.html"
     }

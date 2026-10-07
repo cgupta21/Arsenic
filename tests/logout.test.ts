@@ -75,6 +75,18 @@ describe('POST /auth/logout', () => {
     const cc = String(res.headers['cache-control'] ?? '')
     expect(cc).toContain('no-store')
   })
+
+  it('also supports POST /api/auth/logout directly', async () => {
+    const res = await inProcessFetch('/api/auth/logout', { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(res.json().ok).toBe(true)
+    const setCookie = res.headers['set-cookie']
+    const cookieStr = Array.isArray(setCookie)
+      ? (setCookie as string[]).join('; ')
+      : String(setCookie ?? '')
+    expect(cookieStr.toLowerCase()).toContain('session=')
+    expect(cookieStr.toLowerCase()).toContain('max-age=0')
+  })
 })
 
 describe('GET /api/me', () => {

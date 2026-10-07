@@ -795,15 +795,22 @@ app.get('/auth/github/callback', async (req, res) => {
   }
 })
 
-app.post('/auth/logout', async (req, res) => {
+app.post(['/auth/logout', '/api/auth/logout'], async (req, res) => {
+  console.log(`[LOGOUT DIAGNOSTICS] ${req.method} ${req.url}`)
+  console.log(`[LOGOUT DIAGNOSTICS] req.session exists: ${!!req.session}`)
+  console.log(`[LOGOUT DIAGNOSTICS] req.session.destroy exists: ${!!(req.session && req.session.destroy)}`)
   try {
-    await req.session.destroy()
+    if (req.session && req.session.destroy) {
+      await req.session.destroy()
+      console.log('[LOGOUT DIAGNOSTICS] req.session.destroy() succeeded')
+    } else {
+      console.log('[LOGOUT DIAGNOSTICS] req.session or destroy() missing, proceeding to clear cookie anyway')
+    }
     // iron-session's destroy() clears the session data but does NOT expire the browser cookie.
-    // We must explicitly overwrite the cookie with Max-Age=0 so the browser removes it.
+    // We must explicitly overwrite the cookie with Max-Age=0 and expired date so the browser removes it.
     // Use the exact same cookie name and attributes as sessionOptions so the browser matches it.
     const clearCookieParts = [
-      `${sessionOptions.cookieName}=; Max-Age=0`,
-      'Path=/',
+      `${sessionOptions.cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`,
       'HttpOnly',
       `SameSite=${sessionOptions.cookieOptions.sameSite === 'lax' ? 'Lax' : sessionOptions.cookieOptions.sameSite}`,
       sessionOptions.cookieOptions.secure ? 'Secure' : ''
@@ -812,7 +819,7 @@ app.post('/auth/logout', async (req, res) => {
     res.set('Cache-Control', 'no-store')
     res.json({ ok: true })
   } catch (error) {
-    console.error('Logout error:', error)
+    console.error('[LOGOUT DIAGNOSTICS] Logout error:', error)
     res.status(500).json({ ok: false, error: 'Logout failed.' })
   }
 })
@@ -839,7 +846,7 @@ app.use((err, _req, res, _next) => {
 
 export default app
 
-if (process.env.VERCEL !== '1') {
+if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`Arsenic API running at http://localhost:${PORT}`)
     console.log(defaultToken ? 'GitHub authentication: ENABLED' : 'GitHub authentication: DISABLED — public API rate limit applies')

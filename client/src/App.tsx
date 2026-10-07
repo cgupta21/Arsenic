@@ -119,7 +119,10 @@ export default function App() {
     setLoggingOut(true)
     try {
       const response = await fetch('/auth/logout', { method: 'POST', credentials: 'include' })
-      if (!response.ok) throw new Error('Server returned an error during logout.')
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`Server returned ${response.status} ${response.statusText} during logout. Body: ${text.slice(0, 100)}`)
+      }
       // Cancel any in-flight /api/me that could race and restore auth state
       meGenRef.current += 1
       setSessionUser(null)

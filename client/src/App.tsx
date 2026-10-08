@@ -8,6 +8,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import type { Dashboard } from './types'
 import { buildInsights, compactNumber, formatDate, relativeDays } from './lib/analytics'
 import { consumeGuestSearch, generateSummary, getSessionUser, useDashboard } from './hooks/useDashboard'
+import { normalizeGithubInput } from './lib/normalizeGithubInput'
 import { ContributionHeatmap } from './components/ContributionHeatmap'
 import { ExportButtons } from './components/ExportButtons'
 import { RepoCard } from './components/RepoCard'
@@ -64,6 +65,7 @@ export default function App() {
   const [query, setQuery] = useState(route.username || fallbackUser)
   const [menu, setMenu] = useState(false)
   const [sessionUser, setSessionUser] = useState<{ login: string; name: string | null; avatar_url: string } | null>(null)
+  const [validationError, setValidationError] = useState<string | null>(null)
   const [loginPrompt, setLoginPrompt] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
@@ -88,30 +90,36 @@ export default function App() {
   }, [route])
 
   const submit = async (event: FormEvent) => {
-    event.preventDefault()
-    const username = query.replace(/^@/, '').trim()
-    if (!username) return
+    event.preventDefault();
+    // Normalize input (username or profile URL)
+    const { username, error } = normalizeGithubInput(query);
+    if (error) {
+      setValidationError(error);
+      return;
+    }
+    setValidationError(null);
+    if (!username) return;
 
     if (!sessionUser) {
       try {
-        const usage = await consumeGuestSearch()
+        const usage = await consumeGuestSearch();
         if (!usage.allowed) {
-          setLoginPrompt(true)
-          return
+          setLoginPrompt(true);
+          return;
         }
       } catch (caught) {
-        const message = caught instanceof Error ? caught.message.toLowerCase() : ''
+        const message = caught instanceof Error ? caught.message.toLowerCase() : '';
         if (message.includes('3 free searches') || message.includes('sign in with github')) {
-          setLoginPrompt(true)
-          return
+          setLoginPrompt(true);
+          return;
         }
-        console.error('Search access check failed:', caught)
-        return
+        console.error('Search access check failed:', caught);
+        return;
       }
     }
 
-    recent.add(username)
-    pushRoute(`/u/${encodeURIComponent(username)}`)
+    recent.add(username);
+    pushRoute(`/u/${encodeURIComponent(username)}`);
   }
 
   const signOut = async () => {
@@ -203,6 +211,7 @@ export default function App() {
             pushRoute(`/u/${encodeURIComponent(name)}`)
           }}
           sessionUser={sessionUser}
+          validationError={validationError}
         />
       )}
 
@@ -231,7 +240,7 @@ export default function App() {
 }
 
 function DashboardView({
-  username, query, setQuery, onSubmit, recentSearches, onRecentSearch, sessionUser,
+  username, query, setQuery, onSubmit, recentSearches, onRecentSearch, sessionUser, validationError,
 }: {
   username: string
   query: string
@@ -240,6 +249,7 @@ function DashboardView({
   recentSearches: string[]
   onRecentSearch: (name: string) => void
   sessionUser: { login: string } | null
+  validationError: string | null
 }) {
   const { data, loading, error } = useDashboard(username)
   const [sort, setSort] = useState<'updated' | 'stars' | 'language'>('updated')
@@ -297,6 +307,12 @@ function DashboardView({
             <input aria-label="GitHub username or profile URL" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search GitHub username or paste profile URL" />
             <button disabled={loading}>{loading ? 'Loading…' : 'Analyze'}</button>
           </form>
+          {validationError && (
+            <div className="error" role="alert">
+              <CircleDot size={17} />
+              <div>{validationError}</div>
+            </div>
+          )}
         </section>
 
         {error && <div className="error" role="alert"><CircleDot size={17} /><div><b>{error}</b>{error.toLowerCase().includes('rate') && <small>GitHub can return 403 or 429 for primary and secondary limits. Wait for the reset or retry-after window instead of repeatedly retrying.</small>}</div></div>}

@@ -294,7 +294,7 @@ function DashboardView({
           </div>
           <form className="searchBox" onSubmit={onSubmit}>
             <Search size={18} aria-hidden="true" />
-            <input aria-label="GitHub username" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Enter GitHub username" />
+            <input aria-label="GitHub username or profile URL" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search GitHub username or paste profile URL" />
             <button disabled={loading}>{loading ? 'Loading…' : 'Analyze'}</button>
           </form>
         </section>

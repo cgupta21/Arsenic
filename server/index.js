@@ -396,26 +396,94 @@ async function fetchCommitTiming(username, repos, authToken) {
 }
 
 function flattenCalendar(calendar) {
-  return (calendar?.weeks || []).flatMap((week) => week.contributionDays || [])
+  return (calendar?.weeks || []).flatMap((week) => week?.contributionDays || [])
 }
 
-function calculateStreaks(days) {
-  const ordered = [...days].sort((a, b) => a.date.localeCompare(b.date))
-  let current = 0
+function getPreviousDate(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function getNextDate(dateStr) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+
+function calculateStreaks(days, today) {
+  if (!Array.isArray(days) || days.length === 0) {
+    return { current: 0, longest: 0 }
+  }
+
+  const countByDate = new Map()
+  for (const day of days) {
+    if (!day || typeof day.date !== 'string') continue
+    const date = day.date.slice(0, 10)
+    countByDate.set(date, (countByDate.get(date) || 0) + (Number(day.contributionCount) || 0))
+  }
+
+  if (countByDate.size === 0) {
+    return { current: 0, longest: 0 }
+  }
+
+  // Reference date defaults to server UTC date (YYYY-MM-DD). GitHub returns
+  // contribution dates and commit timestamps in UTC, so the backend consistently evaluates
+  // calendars against UTC today unless an explicit reference date is injected (e.g. in tests).
+  let todayStr
+  if (typeof today === 'string' && today.length >= 10) {
+    todayStr = today.slice(0, 10)
+  } else if (today instanceof Date && !Number.isNaN(today.getTime())) {
+    todayStr = today.toISOString().slice(0, 10)
+  } else {
+    todayStr = new Date().toISOString().slice(0, 10)
+  }
+
+  const sortedDates = Array.from(countByDate.keys()).sort((a, b) => a.localeCompare(b))
+
+  // Only consider dates up to the reference date so future-dated entries cannot anchor or inflate streaks
+  const eligibleDates = sortedDates.filter((date) => date <= todayStr)
+
   let longest = 0
   let run = 0
-  for (const day of ordered) {
-    if (day.contributionCount > 0) {
-      run += 1
-      longest = Math.max(longest, run)
+  let prevDate = null
+
+  for (const date of eligibleDates) {
+    const count = countByDate.get(date) || 0
+    if (count > 0) {
+      if (prevDate && date === getNextDate(prevDate)) {
+        run += 1
+      } else {
+        run = 1
+      }
+      if (run > longest) longest = run
     } else {
       run = 0
     }
+    prevDate = date
   }
-  for (let i = ordered.length - 1; i >= 0; i -= 1) {
-    if (ordered[i].contributionCount > 0) current += 1
-    else break
+
+  const yesterdayStr = getPreviousDate(todayStr)
+  const todayCount = countByDate.get(todayStr) || 0
+  const yesterdayCount = countByDate.get(yesterdayStr) || 0
+
+  let current = 0
+  let startDate = null
+
+  if (todayCount > 0) {
+    startDate = todayStr
+  } else if (yesterdayCount > 0) {
+    startDate = yesterdayStr
   }
+
+  if (startDate) {
+    let curr = startDate
+    while (countByDate.has(curr) && (countByDate.get(curr) || 0) > 0) {
+      current += 1
+      curr = getPreviousDate(curr)
+    }
+  }
+
   return { current, longest }
 }
 
@@ -844,6 +912,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' })
 })
 
+export { calculateStreaks, flattenCalendar }
 export default app
 
 if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {

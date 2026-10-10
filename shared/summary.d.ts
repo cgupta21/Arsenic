@@ -1,1 +1,1 @@
-export function generateDeveloperSummary(data: any): string
+export function generateDeveloperSummary(data: unknown): string

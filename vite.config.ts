@@ -18,6 +18,6 @@ export default defineConfig({
   test: {
     // Vite's root is client/, but the tests live in /tests at the project root.
     root: '.',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
   },
 })

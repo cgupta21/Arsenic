@@ -4,25 +4,32 @@ import type { CompareResponse, Dashboard } from '../types'
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'include', ...init })
   const body = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(body.error || 'Request failed.')
+  if (!response.ok) {
+    const err: Error & { authError?: boolean } = Object.assign(
+      new Error(body.error || 'Request failed.'),
+      { authError: Boolean(body.authError) }
+    )
+    throw err
+  }
   return body as T
 }
 
 export function useDashboard(initialUsername: string) {
   const [data, setData] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{ message: string; authError?: boolean } | null>(null)
 
   const load = useCallback(async (username: string) => {
     setLoading(true)
-    setError('')
+    setError(null)
     try {
       const result = await request<Dashboard>(`/api/dashboard/${encodeURIComponent(username.replace(/^@/, ''))}`)
       setData(result)
       return result
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Unable to load GitHub data.'
-      setError(message)
+      const authError = caught instanceof Error && Boolean((caught as Error & { authError?: boolean }).authError)
+      setError({ message, authError })
       throw caught
     } finally {
       setLoading(false)

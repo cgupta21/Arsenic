@@ -719,8 +719,23 @@ app.get('/api/dashboard/:username', async (req, res) => {
   const privateScope = userCanSeePrivate(req, username)
   const token = sessionToken(req)
   try {
-    const data = await buildDashboard(username, token, privateScope)
-    return res.json(data)
+    try {
+      const data = await buildDashboard(username, token, privateScope)
+      return res.json(data)
+    } catch (error) {
+      if (error.status === 401) {
+        // Invalidate stale token
+        req.session.githubAccessToken = null
+        if (!privateScope) {
+          // Retry with server token for public data
+          const fallbackData = await buildDashboard(username, defaultToken, privateScope)
+          return res.json(fallbackData)
+        }
+        return res.status(401).json({ error: 'GitHub authentication expired. Please sign in again.', authError: true })
+      }
+      // Existing error handling below will be applied after this block
+      throw error
+    }
   } catch (error) {
     if (error.status === 404) return res.status(404).json({ error: `GitHub user "${username}" was not found.` })
 
@@ -753,6 +768,11 @@ app.get('/api/compare/:left/:right', async (req, res) => {
     ])
     res.json({ left: leftData, right: rightData })
   } catch (error) {
+    if (error.status === 401) {
+      // Invalidate stale token and inform client
+      req.session.githubAccessToken = null
+      return res.status(401).json({ error: 'GitHub authentication expired. Please sign in again.', authError: true })
+    }
     if (error.status === 404) return res.status(404).json({ error: error.message })
     if (error.status === 429 || error.rate?.remaining === '0') return res.status(429).json({ error: 'GitHub is rate-limiting the comparison. Please wait and try again.', rateLimit: true })
     console.error('Compare error:', error)
@@ -781,6 +801,11 @@ app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
     summaryCache.set(summaryKey, { summary: text, expires: Date.now() + 60 * 60 * 1000 })
     return res.json({ summary: text, model: 'deterministic-rules', cached: false })
   } catch (error) {
+    if (error.status === 401) {
+      // Invalidate stale token, fallback to server token for public data
+      req.session.githubAccessToken = null
+      return res.status(401).json({ error: 'GitHub authentication expired. Please sign in again.', authError: true })
+    }
     console.error('Deterministic summary error:', error)
     return res.status(error.status === 429 ? 429 : 502).json({ error: error.message || 'The developer summary could not be generated right now.' })
   }

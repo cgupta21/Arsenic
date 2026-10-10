@@ -60,7 +60,6 @@ function useRecentSearches() {
 
 export default function App() {
   const route = useRoute()
-  const dark = true // always dark theme
   const recent = useRecentSearches()
   const [query, setQuery] = useState(route.username || fallbackUser)
   const [menu, setMenu] = useState(false)
@@ -212,6 +211,7 @@ export default function App() {
           }}
           sessionUser={sessionUser}
           validationError={validationError}
+          setLoginPrompt={setLoginPrompt}
         />
       )}
 
@@ -240,7 +240,7 @@ export default function App() {
 }
 
 function DashboardView({
-  username, query, setQuery, onSubmit, recentSearches, onRecentSearch, sessionUser, validationError,
+  username, query, setQuery, onSubmit, recentSearches, onRecentSearch, sessionUser, validationError, setLoginPrompt,
 }: {
   username: string
   query: string
@@ -250,8 +250,15 @@ function DashboardView({
   onRecentSearch: (name: string) => void
   sessionUser: { login: string } | null
   validationError: string | null
+  setLoginPrompt: (value: boolean) => void
 }) {
-  const { data, loading, error } = useDashboard(username)
+  const { data, loading, error } = useDashboard(username);
+  // If the API indicates an auth error, prompt the user to sign in again
+  useEffect(() => {
+    if (error?.authError) {
+      setLoginPrompt(true);
+    }
+  }, [error, setLoginPrompt]);
   const [sort, setSort] = useState<'updated' | 'stars' | 'language'>('updated')
   const [status, setStatus] = useState<'all' | 'active' | 'watch' | 'stale' | 'archived'>('all')
   const [language, setLanguage] = useState('all')
@@ -315,7 +322,19 @@ function DashboardView({
           )}
         </section>
 
-        {error && <div className="error" role="alert"><CircleDot size={17} /><div><b>{error}</b>{error.toLowerCase().includes('rate') && <small>GitHub can return 403 or 429 for primary and secondary limits. Wait for the reset or retry-after window instead of repeatedly retrying.</small>}</div></div>}
+        {error && (
+          <div className="error" role="alert">
+            <CircleDot size={17} />
+            <div>
+              <b>{error.message}</b>
+              {error.message.toLowerCase().includes('rate') && (
+                <small>
+                  GitHub can return 403 or 429 for primary and secondary limits. Wait for the reset or retry-after window instead of repeatedly retrying.
+                </small>
+              )}
+            </div>
+          </div>
+        )}
         {loading && !data ? <div className="loading">Reading GitHub signals for @{username}…</div> : data ? <DashboardContent data={data} repos={repos} sort={sort} setSort={setSort} status={status} setStatus={setStatus} language={language} setLanguage={setLanguage} weeklyActivity={weeklyActivity} insights={insights} shareRef={shareRef} summary={summary} summaryLoading={summaryLoading} aiSummary={aiSummary} sessionUser={sessionUser} /> : null}
       </main>
     </>

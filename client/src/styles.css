@@ -84,7 +84,7 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .stat.accent { border-color: rgba(201,106,69,.42); background: rgba(201,106,69,.08); }
 .stat.accent .statIcon, .stat.accent strong { color: var(--terracotta); }
 .dashboardGrid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 10px; margin-top: 10px; }
-.card { border: 1px solid var(--border); background: var(--card); border-radius: 14px; padding: 20px; min-height: 265px; box-shadow: 0 12px 30px var(--shadow); }
+.card { border: 1px solid var(--border); background: var(--card); border-radius: 14px; padding: 20px; min-height: 265px; box-shadow: 0 12px 30px var(--shadow); display: flex; flex-direction: column; }
 .cardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
 .cardHead h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .cardHead h3 svg { color: var(--terracotta); width: 16px; }
@@ -158,7 +158,9 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .eventIcon { color: var(--sage); padding-top: 2px; }
 .event b { font-size: 11px; font-weight: 600; display: block; }
 .event small { display: block; color: var(--muted); font-size: 10px; margin-top: 4px; }
-.aiPanel { display: flex; flex-direction: column; gap: 15px; }
+.aiPanel { display: flex; flex-direction: column; gap: 15px; flex: 1; }
+.aiPanel .mutedSmall { margin: 0; }
+.aiPanel .primaryBtn { margin-top: auto; width: 100%; }
 .aiText { color: var(--text); font-size: 12px; line-height: 1.75; white-space: pre-line; }
 .empty { color: var(--muted); font-size: 12px; padding: 40px 0; text-align: center; }
 .shareSection { padding-bottom: 70px; }

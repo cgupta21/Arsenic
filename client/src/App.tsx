@@ -152,18 +152,31 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    setMenu(false)
+  }, [route])
+
+  useEffect(() => {
+    if (!menu) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenu(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [menu])
+
   return (
     <div className='app dark'>
       <header className="topbar">
-        <button className="brand brandButton" onClick={() => pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)} aria-label="Go to Arsenic home">
+        <button className="brand brandButton" onClick={() => { pushRoute(`/u/${encodeURIComponent(fallbackUser)}`); setMenu(false) }} aria-label="Go to Arsenic home">
           <img className="brandLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" />
         </button>
         <nav className={menu ? 'nav open' : 'nav'} aria-label="Primary navigation">
-          <button onClick={() => pushRoute(`/u/${route.username || fallbackUser}`)}>Overview</button>
-          <button onClick={() => document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })}>Activity</button>
-          <button onClick={() => document.getElementById('repositories')?.scrollIntoView({ behavior: 'smooth' })}>Repositories</button>
-          <button onClick={() => document.getElementById('insights')?.scrollIntoView({ behavior: 'smooth' })}>Insights</button>
-          <button onClick={() => pushRoute('/compare')}>Compare</button>
+          <button onClick={() => { pushRoute(`/u/${route.username || fallbackUser}`); setMenu(false) }}>Overview</button>
+          <button onClick={() => { document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Activity</button>
+          <button onClick={() => { document.getElementById('repositories')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Repositories</button>
+          <button onClick={() => { document.getElementById('insights')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Insights</button>
+          <button onClick={() => { pushRoute('/compare'); setMenu(false) }}>Compare</button>
         </nav>
         <div className="actions">
 
@@ -172,11 +185,12 @@ export default function App() {
           ) : (
             <a className="outlineBtn authBtn" href="/auth/github" title="Sign in with GitHub"><Github size={15} />Sign in</a>
           )}
-          <button className="iconBtn mobileOnly" onClick={() => setMenu((value) => !value)} aria-label="Open navigation">
+          <button className="iconBtn mobileOnly" onClick={() => setMenu((value) => !value)} aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu}>
             {menu ? <X size={19} /> : <Menu size={19} />}
           </button>
         </div>
       </header>
+      {menu && <div className="navBackdrop mobileOnly" onClick={() => setMenu(false)} aria-hidden="true" />}
 
       {route.mode === 'compare' ? (
         <main><CompareView initialLeft={route.left} initialRight={route.right} /></main>

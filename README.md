@@ -1,164 +1,257 @@
-# Arsenic
+# Arsenic — GitHub Developer Intelligence Dashboard
 
-Arsenic is a GitHub developer-intelligence dashboard that turns repository data and contribution signals into a compact view of **consistency, collaboration, impact, language volume, commit timing and repository health**.
+**Turning GitHub activity into meaningful developer insights.**
 
-## What makes Arsenic portfolio-ready
+Arsenic is a GitHub developer-intelligence dashboard built to analyze developer profiles, repository statistics, contribution activity, coding consistency, collaboration, and repository health. It transforms GitHub data into clear visual insights, helping developers understand their coding activity and project progress.
 
-- GitHub profile and repository analysis with a server-side API proxy.
-- 10-minute per-user in-memory caching plus in-flight request deduplication, and a visible cache indicator.
-- Authenticated GitHub REST/GraphQL access when `GITHUB_TOKEN` is configured.
-- Contribution calendar, current/longest streaks and 8-week trend.
-- Language mix based on repository language byte counts when GraphQL is available, rather than repository count alone.
-- Transparent Arsenic score with **consistency, collaboration and impact** breakdowns; scores can legitimately be low.
-- Commit timing patterns by hour and weekday (UTC) from a sample of recent commits.
-- Repository health labels (active/watch/stale/archived), issue ratio, filters and sorting.
-- Side-by-side developer comparison at `/compare?a=octocat&b=torvalds`.
-- Shareable profile URLs such as `/u/octocat`.
-- Recent-search history stored locally in the browser.
-- Deterministic developer summary built from Arsenic metrics; no external AI service or paid API key is required.
-- PNG/PDF share-card export.
-- Optional GitHub OAuth for the signed-in user's own private contribution counts.
-- Theme persistence, `prefers-color-scheme`, keyboard focus states and reduced-motion support.
-- Helmet, restricted CORS, API rate limiting and `trust proxy` support for hosted deployments.
-- PNG/PDF export libraries are lazy-loaded, so they do not slow the first page load.
-- Production static serving from Express plus Docker and Render deployment configuration.
+**Developed by [Chandan Kumar Gupta](https://github.com/cgupta21)**
+
+<p align="center">
+  <a href="https://arsenic-rho.vercel.app/">
+    <img src="https://img.shields.io/badge/Live%20Demo-Arsenic-C96A45?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo">
+  </a>
+  <a href="https://github.com/cgupta21/Arsenic">
+    <img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github" alt="GitHub Repository">
+  </a>
+  <a href="https://github.com/cgupta21">
+    <img src="https://img.shields.io/badge/GitHub-Developer%20Profile-87966A?style=for-the-badge&logo=github&logoColor=white" alt="Developer Profile">
+  </a>
+</p>
+
+## Live Demo
+
+**Try Arsenic:** https://arsenic-rho.vercel.app/
+
+Analyze GitHub profiles, explore contribution activity, compare developers, inspect repository health, and generate developer summaries.
+
+## Features
+
+### GitHub Profile Analytics
+- Analyze public GitHub profiles and repository statistics.
+- View followers, public repositories, stars, and contribution activity.
+- Explore programming language distribution and repository details.
+- Review recent activity and contribution patterns.
+
+### Contribution Tracking
+- Interactive GitHub-style contribution heatmap.
+- Current and longest contribution streaks.
+- One-year contribution overview and activity trends.
+- Commit timing patterns by weekday and hour, based on sampled commits.
+- Clear distinction between authenticated contribution data and estimates based on public events.
+
+### Arsenic Developer Score
+- A transparent score out of 100.
+- Consistency, collaboration, and impact breakdowns.
+- Metric-based scoring rather than unexplained AI-generated ratings.
+- Insights that help identify areas for improvement.
+
+### Repository Intelligence
+- Repository health labels: Active, Watch, Stale, and Archived.
+- Repository filtering and sorting.
+- Issue-ratio insights and repository activity indicators.
+- Programming language analysis based on language byte counts when available.
+
+### Developer Comparison
+- Compare two GitHub developers side by side.
+- Examine repository statistics, contributions, languages, and activity.
+- Identify differences in development patterns and project activity.
+
+### Intelligent Developer Summary
+- Generates a deterministic summary using collected GitHub metrics.
+- Highlights contribution activity, repositories, languages, and development patterns.
+- Does not require an external AI provider or paid AI API key.
+
+### Export and Sharing
+- Export developer share cards as PNG or PDF.
+- Shareable profile URLs.
+- Recent search history stored locally in the browser.
+- Responsive interface for desktop, tablet, and mobile.
+
+### Authentication and Performance
+- Optional GitHub OAuth authentication.
+- Authenticated access to eligible private contribution information.
+- Server-side GitHub API proxy.
+- Ten-minute in-memory caching by default.
+- In-flight request deduplication.
+- API rate limiting and restricted CORS configuration.
+- Keyboard focus support, reduced-motion support, and theme preference handling.
+
+## Technology Stack
+
+| Category | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite |
+| Backend | Node.js, Express |
+| Data Source | GitHub REST API, GitHub GraphQL API |
+| Authentication | GitHub OAuth (optional) |
+| Styling | CSS, responsive layouts |
+| Export | PNG and PDF generation |
+| Deployment | Vercel frontend deployment; Express production configuration |
+| Testing | TypeScript checks, ESLint, Vitest |
 
 ## Architecture
 
 ```text
-Browser (React + Vite)
-        |
-        | /api, /auth
-        v
-Express API
-  |       |
-  |       +-----------> GitHub OAuth (optional)
-  +-------------------> GitHub REST + GraphQL
-        |
-        +--> deterministic summary engine
-        |
-        +--> in-memory cache (10 min default)
-        |
-        +--> client/dist in production
+React + TypeScript + Vite
+          |
+          | /api and /auth
+          v
+    Express Backend
+          |
+          +------> GitHub REST API
+          |
+          +------> GitHub GraphQL API
+          |
+          +------> Contribution Analysis
+          |
+          +------> Repository Analytics
+          |
+          +------> Deterministic Summary Engine
+          |
+          +------> In-Memory Cache
 ```
 
-## Local setup
+The frontend presents the analytics, while the backend retrieves GitHub data, handles authentication, manages caching, and generates deterministic developer summaries.
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js and npm
+- A GitHub account
+- A GitHub personal access token for authenticated API access
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/cgupta21/Arsenic.git
+cd Arsenic
+```
+
+### 2. Install dependencies
 
 ```bash
 npm install
 ```
 
-Create `.env` from `.env.example` and set at least:
+### 3. Configure environment variables
+
+Create a local `.env` file using `.env.example` as a reference.
 
 ```env
 GITHUB_TOKEN=your_github_token
 PORT=5000
 CLIENT_ORIGIN=http://127.0.0.1:5173
-SESSION_SECRET=change-this-secret
+SESSION_SECRET=your_random_secret
 ```
 
-Developer summary:
-
-The summary engine is deterministic and runs locally in the Arsenic server. It uses the collected score, contribution, repository, language and timing metrics, so there is no AI provider account, API key or paid service required.
-
-Optional GitHub OAuth:
-
-```env
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-GITHUB_CALLBACK_URL=http://127.0.0.1:5000/auth/github/callback
-```
-
-Then:
-
-```bash
-npm run dev
-```
-
-Quality checks:
-
-```bash
-npm run check   # typecheck + lint + tests
-```
-
-Open `http://127.0.0.1:5173`.
-
-## Production
-
-In production the server refuses to start unless `SESSION_SECRET` is a random value of at least 32 characters. Generate one with:
+Generate a secure session secret with:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Optional limits for the summary endpoint: `SUMMARY_LIMIT_PER_10_MIN` (default 5 per IP) and `SUMMARY_DAILY_CAP` (default 200 total).
+Keep all credentials private. Never commit `.env` or expose server secrets through frontend environment variables.
 
-Build the client and start Express:
+### 4. Start the development server
+
+```bash
+npm run dev
+```
+
+Open the local frontend at:
+
+http://127.0.0.1:5173
+
+### 5. Run quality checks
+
+```bash
+npm run check
+```
+
+This runs the project's configured TypeScript checks, linting, and tests.
+
+### 6. Build for production
 
 ```bash
 npm run build
 npm start
 ```
 
-Express serves `client/dist` in production. The health check is:
+For production deployment, configure the required environment variables and use a strong session secret.
 
-```text
-GET /api/health
-```
+## Environment Variables
 
-### Docker
+| Variable | Purpose |
+|---|---|
+| `GITHUB_TOKEN` | Authenticated GitHub API access |
+| `PORT` | Express server port |
+| `CLIENT_ORIGIN` | Allowed frontend origin |
+| `SESSION_SECRET` | Session signing secret |
+| `GITHUB_CLIENT_ID` | Optional GitHub OAuth client ID |
+| `GITHUB_CLIENT_SECRET` | Optional GitHub OAuth client secret |
+| `GITHUB_CALLBACK_URL` | Optional OAuth callback URL |
+| `CACHE_TTL_SECONDS` | Cache duration in seconds |
 
-```bash
-docker build -t arsenic .
-docker run --env-file .env -p 5000:5000 arsenic
-```
+Use `.env.example` as the source of truth for the variables supported by your current version.
 
-### Render
+## API Endpoints
 
-The repository includes `render.yaml`. Add the secrets in the Render dashboard and set `CLIENT_ORIGIN` to the deployed site origin.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/api/health` | Health check |
+| GET | `/api/dashboard/:username` | Developer dashboard data |
+| GET | `/api/compare/:left/:right` | Compare developers |
+| POST | `/api/summary/:username` | Generate developer summary |
+| GET | `/api/me` | Current authenticated user |
+| GET | `/auth/github` | Start GitHub OAuth |
+| GET | `/auth/github/callback` | Handle OAuth callback |
+| POST | `/auth/logout` | End the authenticated session |
 
-## API endpoints
+## GitHub Data and Limitations
 
-- `GET /api/health`
-- `GET /api/dashboard/:username`
-- `GET /api/compare/:left/:right`
-- `POST /api/summary/:username`
-- `GET /api/me`
-- `GET /auth/github`
-- `GET /auth/github/callback`
-- `POST /auth/logout`
+Arsenic uses GitHub REST and GraphQL data to build its analytics.
 
-## Rate-limit strategy
-
-Arsenic caches each analyzed username for 10 minutes by default and shares an in-flight request when the same profile is requested concurrently. The server also handles both GitHub `403` primary-limit responses and `429` secondary throttling responses instead of treating every `403` as a rate-limit error.
-
-GitHub documents 60 unauthenticated REST requests/hour and 5,000 authenticated requests/hour for personal access-token/OAuth-authenticated requests. GitHub also recommends authenticated conditional/cached requests and avoiding unnecessary concurrency when using the REST API.
+- Authenticated GraphQL access can provide contribution-calendar data and eligible private contribution counts.
+- Without suitable authenticated access, contribution statistics may be estimated from the public events feed and may not represent complete historical activity.
+- GitHub contribution counts and repository statistics depend on GitHub's own contribution rules and data availability.
+- The deterministic summary engine does not call an external AI service.
+- GitHub API rate limits and caching can affect how frequently fresh information becomes available.
 
 ## Security
 
-- Never commit `.env` or paste API keys into client code.
-- `GITHUB_TOKEN` is never exposed through `VITE_*` variables.
-- GitHub OAuth access tokens are stored in the server session, not returned to the browser.
-- Sessions use an in-memory store with expired-session cleanup, which is fine for a single-instance demo. Use Redis or another persistent store before running several instances.
-- `.env` is gitignored. The included `.env` contains only blank placeholders; add real credentials locally and never commit them.
+- Keep `.env` out of version control.
+- Never expose GitHub tokens or OAuth client secrets in browser code.
+- Use a strong, randomly generated `SESSION_SECRET` in production.
+- Configure the correct production `CLIENT_ORIGIN`.
+- Use persistent session storage such as Redis before deploying multiple backend instances.
 
-## Notes about GitHub data
+## Deployment
 
-GitHub's public events feed is useful for recent activity but is not a complete historical contribution calendar. Arsenic therefore uses GitHub's GraphQL `contributionsCollection` when an authenticated token is available. Without a token it falls back to an **estimate** built from the public events feed (roughly the last 90 days); the UI labels this clearly. Set `GITHUB_TOKEN` for any deployed version.
+The live frontend is deployed at:
 
-## Suggested demo flow
+**https://arsenic-rho.vercel.app/**
 
-1. Analyze `octocat`.
-2. Search another developer with `/u/<username>`.
-3. Open **Compare** and compare two developers.
-4. Review the score breakdown, heatmap, language volume and repository health.
-5. Generate the intelligent developer summary.
-6. Export the share card as PNG or PDF.
+The repository also includes production Express, Docker, and Render configuration. Deploy the backend separately when required by your hosting architecture, and configure its API origin and environment variables appropriately.
 
-## Live demo
+## Suggested Demo Flow
 
-Add the deployment URL here after publishing:
+1. Open the [live Arsenic dashboard](https://arsenic-rho.vercel.app/).
+2. Analyze your own profile: `cgupta21`.
+3. Explore contribution trends and streak statistics.
+4. Inspect repository health and programming languages.
+5. Generate the deterministic developer summary.
+6. Compare two developers.
+7. Export a profile share card as PNG or PDF.
 
-```text
-https://your-arsenic-domain.example
-```
+## About the Developer
+
+**Chandan Kumar Gupta**
+
+GitHub: [@cgupta21](https://github.com/cgupta21)
+
+Arsenic is a portfolio project focused on GitHub API integration, full-stack development, developer analytics, data visualization, authentication, caching, and responsive UI design.
+
+## License
+
+No license has been specified for this repository. All rights are reserved by default unless a license is added.

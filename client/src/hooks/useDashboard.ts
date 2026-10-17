@@ -47,10 +47,14 @@ export async function compareDashboards(left: string, right: string) {
   return request<CompareResponse>(`/api/compare/${encodeURIComponent(left.replace(/^@/, ''))}/${encodeURIComponent(right.replace(/^@/, ''))}`)
 }
 
-export async function consumeGuestSearch() {
+export async function consumeGuestSearch(username?: string) {
   return request<{ allowed: boolean; authenticated: boolean; searchesRemaining: number | null; loginRequired?: boolean }>(
     '/api/search/consume',
-    { method: 'POST' }
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(username ? { username } : {})
+    }
   )
 }
 

@@ -181,6 +181,9 @@ async function githubGraphQL(query, variables, authToken) {
   const body = await response.json()
 
   if (!response.ok || body.errors?.length) {
+    const isUserNotFound = body.errors?.some((error) => error.type === 'NOT_FOUND' || error.message?.includes('Could not resolve to a User'))
+    if (isUserNotFound) return null
+
     const message = body.errors?.map((error) => error.message).join('; ') || `GitHub GraphQL returned ${response.status}`
     const error = new Error(message)
     error.status = response.status || 400
@@ -657,70 +660,110 @@ app.get('/api/me', (req, res) => {
 app.get('/api/search-history', (_req, res) => {
   res.json({ enabled: false })
 })
-app.post('/api/search/consume', (req, res) => {
+const GUEST_SEARCH_LIMIT = 3
+const FALLBACK_PROFILE = 'cgupta21'
+
+app.post('/api/search/consume', async (req, res) => {
+  res.set('Cache-Control', 'no-store')
+
   // Logged-in users have unlimited searches.
   if (req.session?.githubUser) {
     return res.json({
       allowed: true,
-      remaining: null,
-      authenticated: true
+      authenticated: true,
+      searchesRemaining: null,
+      remaining: null
     })
   }
 
-  const limit = 3
-  const used = Number(req.session?.guestSearches || 0)
+  const requestedUser = req.body?.username ? String(req.body.username).replace(/^@/, '').trim().toLowerCase() : null
+  const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
+  const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
 
-  if (used >= limit) {
-    return res.status(403).json({
-      allowed: false,
-      remaining: 0,
-      authenticated: false,
-      requiresLogin: true,
-      error: 'Guest search limit reached. Please sign in with GitHub to continue.'
-    })
+  // If a specific username was passed, check if it's already searched or is the showcase profile
+  if (requestedUser) {
+    const isRepeated = searched.includes(requestedUser) || requestedUser === FALLBACK_PROFILE.toLowerCase()
+    if (isRepeated) {
+      return res.json({
+        allowed: true,
+        authenticated: false,
+        searchesRemaining: Math.max(0, GUEST_SEARCH_LIMIT - used),
+        remaining: Math.max(0, GUEST_SEARCH_LIMIT - used)
+      })
+    }
   }
 
-  const nextUsed = used + 1
-  req.session.guestSearches = nextUsed
-
-  return res.json({
-    allowed: true,
-    remaining: limit - nextUsed,
-    authenticated: false
-  })
-})
-
-app.post('/api/search/consume', (req, res) => {
-  if (req.session?.githubUser) {
-    return res.json({ allowed: true, authenticated: true, searchesRemaining: null })
-  }
-
-  const used = Number(req.session?.guestSearches || 0)
-  if (used >= 3) {
+  if (used >= GUEST_SEARCH_LIMIT) {
     return res.status(401).json({
       allowed: false,
       authenticated: false,
       searchesRemaining: 0,
+      remaining: 0,
       loginRequired: true,
-      error: 'You have used your 3 free searches. Sign in with GitHub to continue.'
+      requiresLogin: true,
+      error: "You've used your 3 free searches. Sign in with GitHub to continue."
     })
   }
 
-  req.session.guestSearches = used + 1
+  // If a specific username was passed, we verify it is allowed (searched < 3).
+  // The search allowance is only consumed when the dashboard data is successfully retrieved.
+  // This guarantees that if the subsequent dashboard request fails (404, 403, 429, 500, network error)
+  // or if the user disconnects before dashboard load, their free search is NOT lost or desynchronized.
+  if (requestedUser) {
+    return res.json({
+      allowed: true,
+      authenticated: false,
+      searchesRemaining: Math.max(0, GUEST_SEARCH_LIMIT - used),
+      remaining: Math.max(0, GUEST_SEARCH_LIMIT - used)
+    })
+  }
+
+  // If no username was passed (generic consume endpoint caller), consume 1 credit
+  const nextUsed = used + 1
+  req.session.guestSearches = nextUsed
+  await req.session.save()
+
   return res.json({
     allowed: true,
     authenticated: false,
-    searchesRemaining: 3 - (used + 1)
+    searchesRemaining: GUEST_SEARCH_LIMIT - nextUsed,
+    remaining: GUEST_SEARCH_LIMIT - nextUsed
   })
 })
 
 app.get('/api/dashboard/:username', async (req, res) => {
   const username = req.params.username.replace(/^@/, '').trim()
+  const lowerUser = username.toLowerCase()
   const privateScope = userCanSeePrivate(req, username)
   const token = sessionToken(req)
+
+  // Enforce guest search limit on the backend
+  const isAuth = Boolean(req.session?.githubUser)
+  const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
+  const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
+  const isExemptOrRepeated = lowerUser === FALLBACK_PROFILE.toLowerCase() || searched.includes(lowerUser)
+
+  if (!isAuth && !isExemptOrRepeated && used >= GUEST_SEARCH_LIMIT) {
+    return res.status(401).json({
+      error: "You've used your 3 free searches. Sign in with GitHub to continue.",
+      loginRequired: true,
+      authError: true
+    })
+  }
+
+  const recordGuestSearch = async () => {
+    if (!isAuth && lowerUser !== FALLBACK_PROFILE.toLowerCase() && !searched.includes(lowerUser)) {
+      searched.push(lowerUser)
+      req.session.searchedProfiles = searched
+      req.session.guestSearches = searched.length
+      await req.session.save()
+    }
+  }
+
   try {
     try {
       const data = await buildDashboard(username, token, privateScope)
+      await recordGuestSearch()
       return res.json(data)
     } catch (error) {
       if (error.status === 401) {
@@ -729,6 +772,7 @@ app.get('/api/dashboard/:username', async (req, res) => {
         if (!privateScope) {
           // Retry with server token for public data
           const fallbackData = await buildDashboard(username, defaultToken, privateScope)
+          await recordGuestSearch()
           return res.json(fallbackData)
         }
         return res.status(401).json({ error: 'GitHub authentication expired. Please sign in again.', authError: true })
@@ -737,7 +781,9 @@ app.get('/api/dashboard/:username', async (req, res) => {
       throw error
     }
   } catch (error) {
-    if (error.status === 404) return res.status(404).json({ error: `GitHub user "${username}" was not found.` })
+    if (error.status === 404 || error.message?.includes('was not found') || error.message?.includes('Could not resolve to a User')) {
+      return res.status(404).json({ error: `GitHub user "${username}" was not found.` })
+    }
 
     const remaining = error.rate?.remaining
     const reset = error.rate?.reset

@@ -101,7 +101,7 @@ export default function App() {
 
     if (!sessionUser) {
       try {
-        const usage = await consumeGuestSearch();
+        const usage = await consumeGuestSearch(username);
         if (!usage.allowed) {
           setLoginPrompt(true);
           return;
@@ -204,7 +204,7 @@ export default function App() {
           onRecentSearch={async (name) => {
             if (!sessionUser) {
               try {
-                const usage = await consumeGuestSearch()
+                const usage = await consumeGuestSearch(name)
                 if (!usage.allowed) {
                   setLoginPrompt(true)
                   return

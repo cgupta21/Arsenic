@@ -7,6 +7,9 @@ Arsenic is a GitHub developer-intelligence dashboard built to analyze developer 
 **Developed by [Chandan Kumar Gupta](https://github.com/cgupta21)**
 
 <p align="center">
+  <a href="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml">
+    <img src="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
   <a href="https://arsenic-rho.vercel.app/">
     <img src="https://img.shields.io/badge/Live%20Demo-Arsenic-C96A45?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo">
   </a>
@@ -23,6 +26,30 @@ Arsenic is a GitHub developer-intelligence dashboard built to analyze developer 
 **Try Arsenic:** https://arsenic-rho.vercel.app/
 
 Analyze GitHub profiles, explore contribution activity, compare developers, inspect repository health, and generate developer summaries.
+
+## Showcase
+
+Explore Arsenic's developer intelligence capabilities:
+
+### Main Dashboard Overview
+Comprehensive developer analytics with core metrics, public activity signals, repository stars, contribution streak tracking, and transparent scoring.
+
+![Arsenic Dashboard Overview](docs/screenshots/dashboard-overview.png)
+
+### Contribution Signal & Code Distribution
+Interactive contribution heatmap, 8-week activity trends, and programming language code-volume breakdowns.
+
+![Contribution Heatmap and Activity Signals](docs/screenshots/contribution-heatmap.png)
+
+### Side-by-Side Developer Comparison
+Real-time developer comparison contrasting repository velocity, contribution volume, consistency, collaboration, and impact scores.
+
+![Side-by-Side Developer Comparison](docs/screenshots/developer-comparison.png)
+
+### Exportable Profile Share Card
+Clean, exportable developer summary card designed for portfolio integration, social sharing, and PDF/PNG reports.
+
+![Arsenic Share Card](docs/screenshots/share-card.png)
 
 ## Features
 

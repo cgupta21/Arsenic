@@ -254,4 +254,4 @@ Arsenic is a portfolio project focused on GitHub API integration, full-stack dev
 
 ## License
 
-No license has been specified for this repository. All rights are reserved by default unless a license is added.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

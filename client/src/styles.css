@@ -419,3 +419,476 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   from { opacity: 0; transform: translateX(12px) scale(.97); }
   to   { opacity: 1; transform: translateX(0)  scale(1);    }
 }
+
+/* ── Privacy Button in Header & Links ── */
+.privacyBtn {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+  white-space: nowrap;
+}
+.privacyBtn:hover, .privacyBtn:focus-visible {
+  border-color: var(--sage);
+  color: var(--text);
+  background: var(--card2);
+}
+.privacyBtn svg {
+  color: var(--sage);
+  flex-shrink: 0;
+}
+.privacyLinkBtn {
+  background: none;
+  border: 0;
+  color: var(--sand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  display: inline;
+  font-family: inherit;
+}
+.privacyLinkBtn:hover, .privacyLinkBtn:focus-visible {
+  color: #fff;
+}
+
+/* ── Privacy Modal ── */
+.privacyOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 8, 7, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.privacyModal {
+  width: min(580px, 100%);
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: linear-gradient(150deg, var(--card), var(--card2));
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  animation: toast-in .22s cubic-bezier(.22,1,.36,1);
+}
+.privacyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.privacyHeader h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+.privacyBody {
+  padding: 22px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.privacyIntro {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0;
+}
+.privacySection {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.privacySection h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--sand);
+  font-weight: 700;
+}
+.privacySection p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.privacyScopesList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+.scopeItem {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 12px;
+  color: var(--muted);
+}
+.scopeItem code {
+  color: var(--terracotta);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  font-size: 12px;
+}
+.privacyFooter {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ── Error & Empty State Cards ── */
+.stateCardContainer {
+  margin: 28px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.stateCard {
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, var(--card), var(--card2));
+  padding: 36px 28px;
+  border-radius: 16px;
+  box-shadow: 0 16px 45px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto;
+  width: 100%;
+}
+.stateCard--notFound {
+  border-color: rgba(201, 106, 69, 0.4);
+}
+.stateCard--rateLimit {
+  border-color: rgba(229, 211, 179, 0.35);
+}
+.stateCard--network {
+  border-color: rgba(201, 69, 69, 0.4);
+}
+.stateCardIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+}
+.stateCard--notFound .stateCardIcon {
+  background: rgba(201, 106, 69, 0.12);
+  color: var(--terracotta);
+  border: 1px solid rgba(201, 106, 69, 0.3);
+}
+.stateCard--rateLimit .stateCardIcon {
+  background: rgba(229, 211, 179, 0.1);
+  color: var(--sand);
+  border: 1px solid rgba(229, 211, 179, 0.25);
+}
+.stateCard--network .stateCardIcon,
+.stateCard--error .stateCardIcon {
+  background: rgba(201, 69, 69, 0.12);
+  color: #e57373;
+  border: 1px solid rgba(201, 69, 69, 0.3);
+}
+.stateCard h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  letter-spacing: -.02em;
+  color: var(--text);
+}
+.stateCard p {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 480px;
+}
+.stateCardActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stateCardSubtext {
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.stateCardStatus {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--sand);
+}
+
+/* ── Empty Repository Card ── */
+.emptyRepoCard {
+  text-align: center;
+  padding: 42px 24px;
+  border: 1px dashed var(--border);
+  background: var(--card);
+  border-radius: 14px;
+}
+.emptyRepoIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(135, 150, 106, 0.12);
+  color: var(--sage);
+  border: 1px solid rgba(135, 150, 106, 0.25);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+}
+.emptyRepoTitle {
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--text);
+}
+.emptyRepoText {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 420px;
+  margin: 0 auto;
+  line-height: 1.6;
+}
+
+/* ── Estimated Activity Notice & Badge ── */
+.estimateNotice {
+  border: 1px solid rgba(135, 150, 106, 0.28);
+  background: rgba(135, 150, 106, 0.07);
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.estimateHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.estimateBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: rgba(135, 150, 106, 0.22);
+  color: var(--sage);
+  border: 1px solid rgba(135, 150, 106, 0.35);
+}
+.estimateNotice p {
+  margin: 0;
+  line-height: 1.5;
+}
+.estimatePrompt {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  color: var(--sand);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 0 0;
+  font-family: inherit;
+}
+.estimatePrompt:hover, .estimatePrompt:focus-visible {
+  color: #fff;
+}
+
+/* ── Rich Responsive Footer ── */
+.siteFooter {
+  border-top: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg), #0c0c0a);
+  margin-top: 64px;
+  padding: 48px max(20px, calc((100% - 1180px) / 2)) 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.footerTop {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 40px;
+  padding-bottom: 36px;
+  border-bottom: 1px solid var(--border);
+}
+.footerBrand {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+}
+.footerDescription {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.footerTagline {
+  margin: 0;
+  font-size: 11px;
+  color: var(--sage);
+  letter-spacing: .02em;
+}
+.footerLinks {
+  display: contents;
+}
+.footerCol {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.footerColTitle {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--sand);
+  margin-bottom: 4px;
+}
+.footerCol a,
+.footerTextLink {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: color .15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+}
+.footerCol a:hover,
+.footerCol a:focus-visible,
+.footerTextLink:hover,
+.footerTextLink:focus-visible {
+  color: var(--text);
+}
+.footerBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 24px;
+  font-size: 12px;
+  color: #70736a;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.footerBottom p {
+  margin: 0;
+}
+.footerLegal {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.footerLegal a {
+  color: #70736a;
+  text-decoration: none;
+  transition: color .15s ease;
+}
+.footerLegal a:hover,
+.footerLegal a:focus-visible {
+  color: var(--text);
+}
+
+@media (max-width: 768px) {
+  .footerTop {
+    grid-template-columns: 1fr;
+    gap: 28px;
+  }
+  .footerLinks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  .privacyBtnText {
+    display: none;
+  }
+  .privacyBtn {
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .siteFooter {
+    padding: 36px 14px 24px;
+    margin-top: 40px;
+  }
+  .footerLinks {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .stateCard {
+    padding: 24px 16px;
+  }
+  .stateCard h3 {
+    font-size: 18px;
+  }
+  .stateCard p {
+    font-size: 13px;
+  }
+  .stateCardActions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .stateCardActions button,
+  .stateCardActions a {
+    width: 100%;
+    justify-content: center;
+  }
+  .footerBottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

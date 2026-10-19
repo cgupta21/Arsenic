@@ -1,13 +1,30 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { CompareResponse, Dashboard } from '../types'
 
+export interface DashboardError {
+  message: string
+  status?: number
+  authError?: boolean
+  rateLimit?: boolean
+  reset?: string | number | null
+  retryAfter?: string | number | null
+  secondary?: boolean
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'include', ...init })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const err: Error & { authError?: boolean } = Object.assign(
-      new Error(body.error || 'Request failed.'),
-      { authError: Boolean(body.authError) }
+    const err: Error & DashboardError = Object.assign(
+      new Error(body.error || (response.status === 404 ? 'User not found.' : 'Request failed.')),
+      {
+        authError: Boolean(body.authError),
+        status: response.status,
+        rateLimit: Boolean(body.rateLimit),
+        reset: body.reset ?? null,
+        retryAfter: body.retryAfter ?? null,
+        secondary: Boolean(body.secondary)
+      }
     )
     throw err
   }
@@ -17,7 +34,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 export function useDashboard(initialUsername: string) {
   const [data, setData] = useState<Dashboard | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<{ message: string; authError?: boolean } | null>(null)
+  const [error, setError] = useState<DashboardError | null>(null)
 
   const load = useCallback(async (username: string) => {
     setLoading(true)
@@ -28,8 +45,16 @@ export function useDashboard(initialUsername: string) {
       return result
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : 'Unable to load GitHub data.'
-      const authError = caught instanceof Error && Boolean((caught as Error & { authError?: boolean }).authError)
-      setError({ message, authError })
+      const custom = caught as Partial<DashboardError>
+      const status = typeof custom?.status === 'number' ? custom.status : undefined
+      const authError = Boolean(custom?.authError)
+      const rateLimit = Boolean(custom?.rateLimit) || status === 429
+      const reset = custom?.reset ?? null
+      const retryAfter = custom?.retryAfter ?? null
+      const secondary = Boolean(custom?.secondary)
+
+      const errObj: DashboardError = { message, status, authError, rateLimit, reset, retryAfter, secondary }
+      setError(errObj)
       throw caught
     } finally {
       setLoading(false)

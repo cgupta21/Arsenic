@@ -17,6 +17,17 @@
       "destination": "/api/auth/logout"
     },
     {
+      "source": "/u/:username",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": "(?i).*(bot|crawler|spider|facebookexternalhit|twitterbot|whatsapp|telegram|slackbot|discordbot|linkedinbot|embedly|quora|pinterest).*"
+        }
+      ],
+      "destination": "/api/meta/:username"
+    },
+    {
       "source": "/((?!api|auth|assets|.*\\.[^/]+$).*)",
       "destination": "/index.html"
     }

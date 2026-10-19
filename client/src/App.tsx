@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import {
-  Activity, ArrowUpRight, BarChart3, CalendarDays, CheckCircle2,
-  CircleDot, Code2, GitBranch, Github, GitPullRequest, Globe2, LogIn, LogOut, Menu,
-  Search, Sparkles, Star, Users, X,
+  Activity, AlertTriangle, ArrowUpRight, BarChart3, CalendarDays, CheckCircle2,
+  CircleDot, Code2, FolderGit2, GitBranch, Github, GitPullRequest, Globe2, LogIn, LogOut, Menu,
+  RefreshCw, Search, SearchX, ShieldCheck, Sparkles, Star, Users, WifiOff, X,
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Dashboard } from './types'
@@ -68,6 +68,7 @@ export default function App() {
   const [loginPrompt, setLoginPrompt] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
   // Generation counter to prevent stale /api/me from restoring auth after logout
   const meGenRef = useRef(0)
   const headerRef = useRef<HTMLElement>(null)
@@ -86,7 +87,50 @@ export default function App() {
 
   useEffect(() => { void loadSessionUser() }, [loadSessionUser])
   useEffect(() => {
-    document.title = route.mode === 'compare' ? 'Arsenic — Compare Developers' : route.username ? `Arsenic — @${route.username}` : 'Arsenic — Developer Intelligence'
+    const title = route.mode === 'compare'
+      ? 'Arsenic — Compare Developers'
+      : route.username
+        ? `Arsenic — @${route.username}`
+        : 'Arsenic — Developer Intelligence'
+    document.title = title
+
+    const desc = route.mode === 'compare'
+      ? 'Compare GitHub developers head-to-head across streaks, collaboration and repository health.'
+      : route.username
+        ? `GitHub developer intelligence, contribution patterns and repository health for @${route.username} on Arsenic.`
+        : 'Arsenic — GitHub developer intelligence, contribution patterns and repository health.'
+
+    const url = route.mode === 'compare'
+      ? 'https://arsenic-rho.vercel.app/compare'
+      : route.username
+        ? `https://arsenic-rho.vercel.app/u/${encodeURIComponent(route.username)}`
+        : 'https://arsenic-rho.vercel.app/'
+
+    const setMeta = (attr: string, key: string, content: string) => {
+      let el = document.querySelector(`meta[${attr}="${key}"]`)
+      if (!el) {
+        el = document.createElement('meta')
+        el.setAttribute(attr, key)
+        document.head.appendChild(el)
+      }
+      el.setAttribute('content', content)
+    }
+
+    setMeta('property', 'og:title', title)
+    setMeta('property', 'og:description', desc)
+    setMeta('property', 'og:url', url)
+    setMeta('property', 'og:type', route.mode === 'compare' ? 'website' : route.username ? 'profile' : 'website')
+    setMeta('name', 'twitter:title', title)
+    setMeta('name', 'twitter:description', desc)
+    setMeta('name', 'twitter:url', url)
+
+    let canonical = document.querySelector('link[rel="canonical"]')
+    if (!canonical) {
+      canonical = document.createElement('link')
+      canonical.setAttribute('rel', 'canonical')
+      document.head.appendChild(canonical)
+    }
+    canonical.setAttribute('href', url)
   }, [route])
 
   const submit = async (event: FormEvent) => {
@@ -295,6 +339,16 @@ export default function App() {
         </nav>
 
         <div className="actions">
+          <button
+            type="button"
+            className="privacyBtn"
+            onClick={() => setPrivacyOpen(true)}
+            title="GitHub OAuth permissions & privacy"
+            aria-label="GitHub OAuth permissions and privacy note"
+          >
+            <ShieldCheck size={14} />
+            <span className="privacyBtnText">Privacy</span>
+          </button>
           {sessionUser ? (
             <button
               type="button"
@@ -375,18 +429,17 @@ export default function App() {
             <h2 id="loginPromptTitle">You’ve used your 3 free searches.</h2>
             <p>Sign in with GitHub to continue analyzing developer profiles without refreshing or losing your place.</p>
             <a className="primaryBtn loginPromptButton" href="/auth/github"><Github size={16} /> Sign in with GitHub</a>
+            <button type="button" className="privacyLinkBtn" onClick={() => setPrivacyOpen(true)}>
+              <ShieldCheck size={13} /> View OAuth scopes & privacy details
+            </button>
             <button className="ghostBtn loginPromptLater" onClick={() => setLoginPrompt(false)}>Maybe later</button>
           </div>
         </div>
       )}
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-      <footer>
-        <div className="brand"><img className="brandLogo footerLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" /></div>
-        <span>Arsenic · GitHub Developer Intelligence</span>
-        <span>Built by cgupta21 · <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">GitHub ↗</a></span>
-      </footer>
+      <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
+      <Footer onOpenPrivacy={() => setPrivacyOpen(true)} />
     </div>
   )
 }
@@ -404,7 +457,7 @@ function DashboardView({
   validationError: string | null
   setLoginPrompt: (value: boolean) => void
 }) {
-  const { data, loading, error } = useDashboard(username);
+  const { data, loading, error, load } = useDashboard(username);
   // If the API indicates an auth error, prompt the user to sign in again
   useEffect(() => {
     if (error?.authError) {
@@ -475,19 +528,85 @@ function DashboardView({
         </section>
 
         {error && (
-          <div className="error" role="alert">
-            <CircleDot size={17} />
-            <div>
-              <b>{error.message}</b>
-              {error.message.toLowerCase().includes('rate') && (
-                <small>
-                  GitHub can return 403 or 429 for primary and secondary limits. Wait for the reset or retry-after window instead of repeatedly retrying.
-                </small>
-              )}
-            </div>
+          <div className="stateCardContainer">
+            {error.status === 404 || error.message.toLowerCase().includes('not found') || error.message.toLowerCase().includes('could not resolve') ? (
+              <div className="stateCard" role="alert">
+                <div className="stateCardIcon terracotta">
+                  <SearchX size={26} />
+                </div>
+                <h3>Developer "@{username}" not found</h3>
+                <p>We couldn't find a GitHub profile matching <code>@{username}</code>. Please check the spelling or paste a valid GitHub profile URL.</p>
+                <div className="stateCardActions">
+                  <button type="button" className="primaryBtn" onClick={() => load(username)}>
+                    <RefreshCw size={14} /> Try again
+                  </button>
+                  <button
+                    type="button"
+                    className="ghostBtn"
+                    onClick={() => {
+                      setQuery(fallbackUser)
+                      pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+                    }}
+                  >
+                    View @{fallbackUser} showcase
+                  </button>
+                </div>
+              </div>
+            ) : error.status === 429 || error.rateLimit || error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('throttled') ? (
+              <div className="stateCard" role="alert">
+                <div className="stateCardIcon terracotta">
+                  <AlertTriangle size={26} />
+                </div>
+                <h3>GitHub API rate limit reached</h3>
+                <p>
+                  {error.reset
+                    ? `GitHub API request limit reached. Rate limit window resets at ${new Date(Number(error.reset) * 1000).toLocaleTimeString()}.`
+                    : error.message}
+                </p>
+                <p className="stateCardSubtext">
+                  Unauthenticated requests are limited to 60 requests/hour by GitHub. Signing in with GitHub provides an authenticated rate limit of 5,000 requests/hour (note that signing in does not bypass active secondary abuse limits).
+                </p>
+                <div className="stateCardActions">
+                  {!sessionUser && (
+                    <a className="primaryBtn" href="/auth/github">
+                      <Github size={15} /> Sign in with GitHub
+                    </a>
+                  )}
+                  <button type="button" className="ghostBtn" onClick={() => load(username)}>
+                    <RefreshCw size={14} /> Retry request
+                  </button>
+                </div>
+              </div>
+            ) : error.status === 502 || error.status === 500 || error.status === 503 || error.status === 504 || error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('could not reach') || error.message.toLowerCase().includes('network') ? (
+              <div className="stateCard" role="alert">
+                <div className="stateCardIcon sage">
+                  <WifiOff size={26} />
+                </div>
+                <h3>GitHub service temporarily unavailable</h3>
+                <p>Arsenic could not connect to GitHub's servers right now. GitHub's API may be experiencing disruptions or your network connection might be interrupted.</p>
+                <div className="stateCardActions">
+                  <button type="button" className="primaryBtn" onClick={() => load(username)}>
+                    <RefreshCw size={14} /> Retry connection
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="stateCard" role="alert">
+                <div className="stateCardIcon terracotta">
+                  <CircleDot size={26} />
+                </div>
+                <h3>Unable to load developer data</h3>
+                <p>{error.message}</p>
+                <div className="stateCardActions">
+                  <button type="button" className="primaryBtn" onClick={() => load(username)}>
+                    <RefreshCw size={14} /> Try again
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
-        {loading && !data ? <div className="loading">Reading GitHub signals for @{username}…</div> : data ? <DashboardContent data={data} repos={repos} sort={sort} setSort={setSort} status={status} setStatus={setStatus} language={language} setLanguage={setLanguage} weeklyActivity={weeklyActivity} insights={insights} shareRef={shareRef} summary={summary} summaryLoading={summaryLoading} aiSummary={aiSummary} sessionUser={sessionUser} /> : null}
+        {loading && !data ? <div className="loading"><span className="pulseDot" /> Reading GitHub signals for @{username}…</div> : data ? <DashboardContent data={data} repos={repos} sort={sort} setSort={setSort} status={status} setStatus={setStatus} language={language} setLanguage={setLanguage} weeklyActivity={weeklyActivity} insights={insights} shareRef={shareRef} summary={summary} summaryLoading={summaryLoading} aiSummary={aiSummary} sessionUser={sessionUser} /> : null}
       </main>
     </>
   )
@@ -519,7 +638,25 @@ function DashboardContent({
 
   return (
     <>
-      {!data.authenticated && <div className="notice"><LogIn size={16} /> Public API mode: activity is estimated from GitHub's public events feed (about the last 90 days). Add <code>GITHUB_TOKEN</code> on the server for the full contribution calendar and exact language volume.</div>}
+      {data.estimated && (
+        <div className="estimateNotice" role="note">
+          <div className="estimateHead">
+            <span className="estimateBadge"><Sparkles size={13} /> Estimated from public events</span>
+            <span>Public API mode</span>
+          </div>
+          <p>
+            Activity metrics are estimated from GitHub's public events feed (approximately the last 90 days or up to 300 events). They do not represent verified official GitHub contribution totals. Private contributions, older activity, and web-only edits may be omitted.
+          </p>
+          {!sessionUser && (
+            <div className="estimatePrompt">
+              <a className="textLink" href="/auth/github">
+                <LogIn size={13} /> Sign in with GitHub for higher rate limits and to include your own private contributions
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+      {!data.authenticated && !data.estimated && <div className="notice"><LogIn size={16} /> Public API mode: activity is estimated from GitHub's public events feed (about the last 90 days). Add <code>GITHUB_TOKEN</code> on the server for the full contribution calendar and exact language volume.</div>}
       {data.api.graphqlRemaining !== null && <div className="rateBar"><span>GitHub GraphQL remaining: <b>{data.api.graphqlRemaining}</b></span><span>Cache: {Math.round(data.api.cacheTtlSeconds / 60)} min</span>{privateForSelf && <span>Private contribution counts enabled</span>}</div>}
 
       <section id="overview" className="profileCard">
@@ -565,9 +702,46 @@ function DashboardContent({
       </section>
 
       <section id="repositories">
-        <div className="sectionHead"><div><h2>Repository portfolio</h2><p>{data.repos.length} repositories analyzed with health signals instead of a fixed six-card preview.</p></div><div className="filters"><select aria-label="Repository status filter" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}><option value="all">All status</option><option value="active">Active</option><option value="watch">Watch</option><option value="stale">Stale</option><option value="archived">Archived</option></select><select aria-label="Repository language filter" value={language} onChange={(e) => setLanguage(e.target.value)}><option value="all">All languages</option>{data.languages.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}</select><select aria-label="Repository sort" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}><option value="updated">Recently updated</option><option value="stars">Most stars</option><option value="language">Language</option></select></div></div>
-        <div className="repoGrid">{repos.map((repo) => <RepoCard key={repo.id} repo={repo} />)}</div>
-        {!repos.length && <Empty text="No repositories match the selected filters." />}
+        <div className="sectionHead">
+          <div>
+            <h2>Repository portfolio</h2>
+            <p>{data.repos.length} {data.repos.length === 1 ? 'repository' : 'repositories'} analyzed with health signals instead of a fixed six-card preview.</p>
+          </div>
+          {data.repos.length > 0 && (
+            <div className="filters">
+              <select aria-label="Repository status filter" value={status} onChange={(e) => setStatus(e.target.value as typeof status)}>
+                <option value="all">All status</option>
+                <option value="active">Active</option>
+                <option value="watch">Watch</option>
+                <option value="stale">Stale</option>
+                <option value="archived">Archived</option>
+              </select>
+              <select aria-label="Repository language filter" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                <option value="all">All languages</option>
+                {data.languages.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
+              </select>
+              <select aria-label="Repository sort" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)}>
+                <option value="updated">Recently updated</option>
+                <option value="stars">Most stars</option>
+                <option value="language">Language</option>
+              </select>
+            </div>
+          )}
+        </div>
+
+        {data.repos.length === 0 ? (
+          <div className="emptyRepoCard">
+            <FolderGit2 size={24} />
+            <div>
+              <h4>No public repositories to analyze</h4>
+              <p>@{user.login} does not have any accessible public repositories. Valid profile information, bio, and public activity signals remain visible above.</p>
+            </div>
+          </div>
+        ) : repos.length === 0 ? (
+          <div className="empty">No repositories match the selected filters.</div>
+        ) : (
+          <div className="repoGrid">{repos.map((repo) => <RepoCard key={repo.id} repo={repo} />)}</div>
+        )}
       </section>
 
       <section id="insights" className="dashboardGrid bottom">
@@ -620,5 +794,153 @@ function Toast({ message, type, onClose }: { message: string; type: 'success' | 
       <span>{message}</span>
       <button className="toastClose" onClick={onClose} aria-label="Dismiss notification"><X size={13} /></button>
     </div>
+  )
+}
+
+function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => {
+      document.body.style.overflow = prev
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div
+      className="privacyOverlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="privacyTitle"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="privacyModal">
+        <button type="button" className="privacyCloseBtn" onClick={onClose} aria-label="Close privacy note">
+          <X size={18} />
+        </button>
+
+        <div className="privacyHeader">
+          <div className="privacyIcon"><ShieldCheck size={24} /></div>
+          <div>
+            <h2 id="privacyTitle">GitHub OAuth & Privacy Transparency</h2>
+            <span className="privacySubtitle">Verified scope usage & data handling principles</span>
+          </div>
+        </div>
+
+        <div className="privacyBody">
+          <div className="privacySection">
+            <h4>Requested OAuth Scopes</h4>
+            <div className="scopeItem">
+              <code>read:user</code>
+              <span>Read-only access to your public profile (avatar, username, display name).</span>
+            </div>
+            <div className="scopeItem">
+              <code>user:email</code>
+              <span>Read-only access to verify your primary email for session authentication.</span>
+            </div>
+          </div>
+
+          <div className="privacySection">
+            <h4>What Arsenic Uses Permissions For</h4>
+            <ul>
+              <li><strong>Higher API rate limits:</strong> Lifts GitHub API capacity from 60 requests/hour (guest) to 5,000 requests/hour.</li>
+              <li><strong>Self-analytics:</strong> Permits including private contribution counts exclusively on your own dashboard when signed in.</li>
+              <li><strong>Zero write operations:</strong> Arsenic requests strictly read-only scopes. It cannot create repositories, commit code, push changes, or alter account settings.</li>
+            </ul>
+          </div>
+
+          <div className="privacySection">
+            <h4>Data Storage & Session Duration</h4>
+            <ul>
+              <li><strong>No persistent database:</strong> Arsenic operates without a database (no PostgreSQL, MongoDB, etc.) and does not write profile data or tokens to disk.</li>
+              <li><strong>Encrypted session cookie:</strong> Tokens are stored inside a sealed, encrypted HTTP-only browser cookie (<code>iron-session</code>) valid for up to 7 days.</li>
+              <li><strong>Immediate revocation on sign-out:</strong> Clicking "Sign out" destroys the session and immediately clears the cookie.</li>
+              <li><strong>In-memory server cache:</strong> Public GitHub dashboard responses are temporarily cached in RAM for up to 10 minutes to respect GitHub API guidelines.</li>
+            </ul>
+          </div>
+
+          <div className="privacySection">
+            <h4>Third-Party Sharing</h4>
+            <p>Arsenic never sells, shares, or transmits user data to third parties, advertising networks, or external telemetry platforms. Communication takes place strictly between your browser and the official GitHub API.</p>
+          </div>
+        </div>
+
+        <div className="privacyFooter">
+          <button type="button" className="primaryBtn" onClick={onClose}>Understood</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Footer({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
+  const currentYear = new Date().getFullYear()
+
+  return (
+    <footer className="siteFooter">
+      <div className="footerTop">
+        <div className="footerBrand">
+          <div className="brand">
+            <img className="brandLogo footerLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" />
+          </div>
+          <p className="footerDescription">
+            GitHub developer intelligence and repository analytics.
+          </p>
+        </div>
+
+        <div className="footerLinks">
+          <div className="footerCol">
+            <span className="footerColTitle">Project</span>
+            <a href="https://github.com/cgupta21/Arsenic" target="_blank" rel="noopener noreferrer">
+              <Github size={14} /> GitHub Repository ↗
+            </a>
+            <a href="https://github.com/cgupta21/Arsenic/blob/main/README.md" target="_blank" rel="noopener noreferrer">
+              Documentation ↗
+            </a>
+            <button type="button" className="footerTextLink" onClick={onOpenPrivacy}>
+              <ShieldCheck size={14} /> OAuth & Privacy
+            </button>
+          </div>
+
+          <div className="footerCol">
+            <span className="footerColTitle">Developer</span>
+            <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">
+              Chandan Kumar Gupta ↗
+            </a>
+            <button
+              type="button"
+              className="footerTextLink"
+              onClick={() => {
+                pushRoute('/u/cgupta21')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              Showcase Profile (@cgupta21)
+            </button>
+            <button
+              type="button"
+              className="footerTextLink"
+              onClick={() => {
+                pushRoute('/compare')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              Compare Developers
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="footerBottom">
+        <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">Chandan Kumar Gupta</a>.</span>
+        <span className="footerTagline">Independent GitHub analytics · Not affiliated with GitHub, Inc.</span>
+      </div>
+    </footer>
   )
 }

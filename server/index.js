@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit'
 import { getIronSession } from 'iron-session'
 import crypto from 'node:crypto'
 import path from 'node:path'
+import fs from 'node:fs'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 import { fileURLToPath } from 'node:url'
@@ -804,6 +805,61 @@ app.get('/api/dashboard/:username', async (req, res) => {
   }
 })
 
+app.get('/api/meta/:username', (req, res) => {
+  const rawUser = req.params.username || ''
+  const username = decodeURIComponent(String(rawUser)).replace(/^@/, '').trim()
+  const displayUser = username || 'Developer'
+  const title = `Arsenic — @${displayUser}`
+  const description = `GitHub developer intelligence, contribution patterns and repository health for @${displayUser} on Arsenic.`
+  const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
+  const image = 'https://arsenic-rho.vercel.app/assets/social-preview.png'
+
+  const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#11110F" />
+    <meta name="description" content="${description}" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="profile" />
+    <meta property="og:url" content="${url}" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:image" content="${image}" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="${title}" />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${url}" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${image}" />
+    <meta name="twitter:image:alt" content="${title}" />
+
+    <!-- Canonical -->
+    <link rel="canonical" href="${url}" />
+
+    <!-- Favicon -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+
+    <title>${title}</title>
+    <meta http-equiv="refresh" content="0;url=/u/${encodeURIComponent(username)}" />
+  </head>
+  <body>
+    <p>Viewing <a href="/u/${encodeURIComponent(username)}">${title}</a> on Arsenic.</p>
+  </body>
+</html>`
+
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+  return res.status(200).send(html)
+})
+
 app.get('/api/compare/:left/:right', async (req, res) => {
   const left = req.params.left.replace(/^@/, '').trim()
   const right = req.params.right.replace(/^@/, '').trim()
@@ -971,7 +1027,32 @@ if (process.env.VERCEL !== '1') {
   app.use(express.static(distPath))
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
-    res.sendFile(path.join(distPath, 'index.html'), (error) => {
+    const indexPath = path.join(distPath, 'index.html')
+    const match = req.path.match(/^\/u\/([^/]+)/)
+    if (match) {
+      const username = decodeURIComponent(match[1]).replace(/^@/, '').trim()
+      const title = `Arsenic — @${username}`
+      const desc = `GitHub developer intelligence, contribution patterns and repository health for @${username} on Arsenic.`
+      const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
+      try {
+        let content = fs.readFileSync(indexPath, 'utf-8')
+        content = content
+          .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
+          .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)
+          .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${desc}" />`)
+          .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${url}" />`)
+          .replace(/<meta property="og:type" content=".*?" \/>/, `<meta property="og:type" content="profile" />`)
+          .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`)
+          .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${desc}" />`)
+          .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${url}" />`)
+          .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${url}" />`)
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        return res.send(content)
+      } catch {
+        // Fallback to sendFile if index.html is not yet built
+      }
+    }
+    res.sendFile(indexPath, (error) => {
       if (error) next()
     })
   })

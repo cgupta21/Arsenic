@@ -70,6 +70,7 @@ export default function App() {
   const [loggingOut, setLoggingOut] = useState(false)
   // Generation counter to prevent stale /api/me from restoring auth after logout
   const meGenRef = useRef(0)
+  const headerRef = useRef<HTMLElement>(null)
 
   useEffect(() => { setQuery(route.username || query) }, [route.username])
 
@@ -152,41 +153,178 @@ export default function App() {
     }
   }
 
+  const navigateTo = (sectionOrRoute: 'overview' | 'activity' | 'repositories' | 'insights' | 'compare') => {
+    setMenu(false)
+    if (sectionOrRoute === 'compare') {
+      pushRoute('/compare')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
+    const targetUser = route.username || fallbackUser
+    if (route.mode !== 'dashboard') {
+      pushRoute(`/u/${encodeURIComponent(targetUser)}`)
+      if (sectionOrRoute === 'overview') {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        setTimeout(() => {
+          document.getElementById(sectionOrRoute)?.scrollIntoView({ behavior: 'smooth' })
+        }, 100)
+      }
+    } else {
+      if (sectionOrRoute === 'overview') {
+        const el = document.getElementById('overview')
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth' })
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+      } else {
+        document.getElementById(sectionOrRoute)?.scrollIntoView({ behavior: 'smooth' })
+      }
+    }
+  }
+
   useEffect(() => {
     setMenu(false)
   }, [route])
 
   useEffect(() => {
     if (!menu) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setMenu(false)
     }
+
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      if (headerRef.current && !headerRef.current.contains(e.target as Node)) {
+        setMenu(false)
+      }
+    }
+
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('touchstart', onPointerDown, { passive: true })
+
+    return () => {
+      document.body.style.overflow = prevOverflow
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('touchstart', onPointerDown)
+    }
   }, [menu])
+
+  useEffect(() => {
+    const onResize = () => {
+      if (window.innerWidth > 768) {
+        setMenu(false)
+      }
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   return (
     <div className='app dark'>
-      <header className="topbar">
-        <button className="brand brandButton" onClick={() => { pushRoute(`/u/${encodeURIComponent(fallbackUser)}`); setMenu(false) }} aria-label="Go to Arsenic home">
+      <header className="topbar" ref={headerRef}>
+        <button
+          type="button"
+          className="brand brandButton"
+          onClick={() => {
+            pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+            setMenu(false)
+            window.scrollTo({ top: 0, behavior: 'smooth' })
+          }}
+          aria-label="Go to Arsenic home"
+        >
           <img className="brandLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" />
         </button>
-        <nav className={menu ? 'nav open' : 'nav'} aria-label="Primary navigation">
-          <button onClick={() => { pushRoute(`/u/${route.username || fallbackUser}`); setMenu(false) }}>Overview</button>
-          <button onClick={() => { document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Activity</button>
-          <button onClick={() => { document.getElementById('repositories')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Repositories</button>
-          <button onClick={() => { document.getElementById('insights')?.scrollIntoView({ behavior: 'smooth' }); setMenu(false) }}>Insights</button>
-          <button onClick={() => { pushRoute('/compare'); setMenu(false) }}>Compare</button>
-        </nav>
-        <div className="actions">
 
+        <nav
+          id="primary-navigation"
+          className={menu ? 'nav open' : 'nav'}
+          aria-label="Primary navigation"
+        >
+          <a
+            href={`/u/${encodeURIComponent(route.username || fallbackUser)}#overview`}
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('overview')
+            }}
+          >
+            Overview
+          </a>
+          <a
+            href="#activity"
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('activity')
+            }}
+          >
+            Activity
+          </a>
+          <a
+            href="#repositories"
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('repositories')
+            }}
+          >
+            Repositories
+          </a>
+          <a
+            href="#insights"
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('insights')
+            }}
+          >
+            Insights
+          </a>
+          <a
+            href="/compare"
+            onClick={(e) => {
+              e.preventDefault()
+              navigateTo('compare')
+            }}
+          >
+            Compare
+          </a>
+        </nav>
+
+        <div className="actions">
           {sessionUser ? (
-            <button className="accountBtn" onClick={signOut} disabled={loggingOut} title={loggingOut ? 'Signing out…' : `Sign out @${sessionUser.login}`}><img src={sessionUser.avatar_url} alt="" /><LogOut size={15} /></button>
+            <button
+              type="button"
+              className="accountBtn"
+              onClick={signOut}
+              disabled={loggingOut}
+              title={loggingOut ? 'Signing out…' : `Sign out @${sessionUser.login}`}
+            >
+              <img src={sessionUser.avatar_url} alt="" />
+              <LogOut size={16} />
+            </button>
           ) : (
-            <a className="outlineBtn authBtn" href="/auth/github" title="Sign in with GitHub"><Github size={15} />Sign in</a>
+            <a
+              className="outlineBtn authBtn"
+              href="/auth/github"
+              title="Sign in with GitHub"
+            >
+              <Github size={16} />
+              <span>Sign in</span>
+            </a>
           )}
-          <button className="iconBtn mobileOnly" onClick={() => setMenu((value) => !value)} aria-label={menu ? 'Close navigation' : 'Open navigation'} aria-expanded={menu}>
-            {menu ? <X size={19} /> : <Menu size={19} />}
+          <button
+            type="button"
+            className="iconBtn mobileOnly"
+            onClick={() => setMenu((value) => !value)}
+            aria-label={menu ? 'Close navigation' : 'Open navigation'}
+            aria-expanded={menu}
+            aria-controls="primary-navigation"
+          >
+            {menu ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
       </header>

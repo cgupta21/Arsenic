@@ -91,7 +91,7 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - Serverless crawler edge route (`/u/:username` rewritten to `api/meta/[username].js`) delivering profile-specific Open Graph and Twitter Card metadata to social bots without running the client-side SPA.
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
 
-### Security & Session Architecture
+### Session & Access Control Features
 - **Stateless Encrypted Sessions (`iron-session`):** Authentication credentials and session states are sealed inside encrypted, HTTP-only, `SameSite=Lax` browser cookies with a 7-day TTL (`secure: true` in production). Sessions are destroyed immediately on sign-out (`Max-Age=0`).
 - **Multi-Instance Ready without Redis:** Because session state is stored entirely client-side in encrypted cookies, horizontal scaling across multiple server instances or ephemeral serverless functions does **not** require Redis or a centralized session database. Any instance sharing the same `SESSION_SECRET` can decrypt and validate sessions.
 - **Cookie-Based Guest Search Allowance:**
@@ -101,7 +101,7 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
     - **Failed requests:** 400 (invalid username), 404 (user not found), 429 (rate-limited), and 500 (upstream outage) errors never consume guest search attempts.
     - **Authenticated users:** Completely exempt with unlimited searches.
     - **Showcase profile:** The configured showcase account (`cgupta21`) is exempt from quota consumption.
-  - **Cookie-Based Tracking & Limitations:** The guest allowance is tracked directly in the user's encrypted session cookie (`req.session.searchedProfiles`). It is not a centralized server-side counter or an abuse prevention boundary; visitors can reset their quota simply by clearing browser cookies, using private/incognito browsing, or switching browsers. The limit is intended as a frictionless onboarding guardrail to encourage GitHub sign-in, while backend abuse is mitigated by upstream GitHub IP rate limits and local rate limiters.
+  - **Cookie-Based Tracking & Limitations:** The guest allowance is tracked directly in the user's encrypted session cookie (`req.session.searchedProfiles`). It is not a centralized server-side counter or an abuse prevention boundary; visitors can reset their quota by clearing browser cookies, using private/incognito browsing, switching browsers, or accessing from a different device. The limit is intended as a frictionless onboarding guardrail to encourage GitHub sign-in, while backend abuse is mitigated by upstream GitHub IP rate limits and local rate limiters.
 - **Strictly Read-Only OAuth Scopes:** Requests only `read:user user:email`. Zero repository write scopes, organization administration, or workflow permissions are requested.
 - **No Persistent Storage:** Zero database connections, user profiles, or access tokens stored on disk.
 - **Security Headers (Helmet & Vercel Edge):** Enforces Content-Security-Policy (CSP), `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security` (HSTS).
@@ -169,20 +169,89 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 +--------------------+   +--------------------+          +--------------------+
 ```
 
-### Production Deployment vs. Standalone Architecture
+### Architecture Overview & Runtime Environments
 
-- **Production Deployment (Vercel):**
-  - **Frontend:** Built with Vite (`npm run build`) and served as a static Single Page Application from `client/dist` via Vercel's global CDN edge network.
-  - **API Endpoints:** Handled by serverless function routes in `api/` (such as `api/[...path].js`, `api/dashboard/[username].js`, and `api/compare/[left]/[right].js`). These functions act as thin serverless adapters that instantiate and route incoming requests into the core Express application exported from `server/index.js`.
-  - **Crawler Metadata Route:** Social crawlers requesting `/u/:username` are intercepted at the edge via `vercel.json` rewrites and routed to `api/meta/[username].js`, which returns lightweight Open Graph / Twitter Card HTML without loading the SPA.
-- **Optional Standalone Express Deployment (e.g. Render / Railway / Docker):**
-  - `server/index.js` contains a standalone entry point (`if (process.env.VERCEL !== '1') app.listen(PORT)`).
-  - Can be deployed as a traditional long-running Node/Express container via `npm start`. This is an optional alternative deployment target, not the current primary production environment.
-- **In-Memory Cache Realities & Limitations:**
+- **Vite & React Single Page Application:** The frontend is built with React 18, TypeScript, and Vite. It renders responsive developer telemetry, Recharts data visualizers, and interactive dashboard components styled with custom CSS variables.
+- **Production Serverless Routing (Vercel):** Production hosting is powered by Vercel. Static client assets are built (`npm run build`) and served from `client/dist` across Vercel's global CDN edge network. Dynamic API requests (`/api/*`) are handled by serverless function routes in `api/` (such as `api/[...path].js`, `api/dashboard/[username].js`, and `api/compare/[left]/[right].js`). These functions act as thin serverless adapters that instantiate and route incoming requests into the core Express application.
+- **Unified Express Backend (`server/index.js`):** Encapsulates all route definitions, rate limiting, Helmet security headers, CORS origin verification, `iron-session` cookie encryption, GitHub REST/GraphQL data fetching, deterministic scoring algorithms, and summary generation.
+- **Crawler Edge Prerendering:** Social crawlers requesting `/u/:username` are intercepted at the edge via `vercel.json` rewrites and routed to `api/meta/[username].js`. This returns lightweight HTML containing profile-specific Open Graph and Twitter Card tags directly to social bots without executing the client-side SPA bundle.
+- **Optional Standalone Node.js/Express Deployment:**
+  - `server/index.js` includes a standalone server listener (`if (process.env.VERCEL !== '1') app.listen(PORT)`).
+  - Can be run locally via `npm run dev` (concurrent Vite + Express) or `npm start`.
+  - Can be built and deployed as a standalone container using the included multi-stage [`Dockerfile`](Dockerfile) (targeting `node:22-alpine` with build and runtime stages) or deployed to container services like Render using the included [`render.yaml`](render.yaml) specification.
+- **In-Memory Caching Realities & Per-Instance Limitations:**
   - Arsenic uses in-memory JavaScript `Map` data structures (`cache`, `inflight`, `summaryCache`) with a 10-minute TTL.
-  - **In Serverless (Vercel):** Memory is scoped strictly to an individual warm container instance. Caches are **not automatically shared** across parallel serverless invocations, regions, or cold starts. When requests route to a different serverless instance or after an instance scales to zero, cache misses occur and fresh data is fetched from GitHub. In-flight request deduplication only deduplicates concurrent requests hitting the same active container.
-  - **In Standalone Server:** The in-memory cache persists across all requests for the lifetime of that single Node process.
-  - In all environments, the cache is volatile and ephemeral; it is never written to disk or shared via an external distributed cache.
+  - **In Serverless (Vercel):** Memory is scoped strictly to an individual warm container instance. Caches and in-flight request deduplication are **not shared globally** across parallel serverless invocations, differing edge regions, or across cold starts. When requests route to a different serverless instance or after an instance scales to zero, cache misses occur and fresh data is fetched from GitHub.
+  - **In Standalone Server:** The in-memory cache persists across all incoming requests for the lifetime of that single Node process.
+  - In all environments, the cache is volatile and ephemeral; it is never written to disk or synchronized via an external distributed cache.
+
+---
+
+## Deployment
+
+The live production application is deployed on Vercel at:
+
+> **Production URL:** [https://arsenic-rho.vercel.app/](https://arsenic-rho.vercel.app/)
+
+### 1. Primary Production Deployment: Vercel Serverless Platform
+- **Frontend Delivery:** Built with Vite (`npm run build`) and distributed globally via Vercel's edge CDN from `client/dist`.
+- **API Function Routing:** Serverless function adapters in `api/` delegate incoming API calls directly to the Express application exported from `server/index.js`.
+- **Edge Rewrites:** `vercel.json` handles rewrites for `/u/:username` crawler traffic to `api/meta/[username].js` and redirects human browser navigation to `/index.html`.
+- **Serverless In-Memory State & Rate Limiter Realities:** On Vercel, rate limiters (`express-rate-limit`) and in-memory caches are scoped to individual warm container instances. They are not shared across parallel serverless functions, different geographical edge regions, or across cold starts. They provide best-effort protection rather than globally synchronized quotas.
+
+### 2. Optional Standalone Express Deployment
+- **Local & VM Execution:** The application can run as a traditional long-running Node/Express server via `npm start`, listening on port `5000` (or the configured `PORT`).
+- **Docker Containerization:** A multi-stage [`Dockerfile`](Dockerfile) is provided in the repository. It builds the Vite frontend in stage 1 (`node:22-alpine`) and packages the Express server with production dependencies and static assets in stage 2.
+- **Render Web Service:** A complete [`render.yaml`](render.yaml) blueprint is included, preconfigured with `npm ci && npm run build`, `npm start`, and health check verification at `/api/health`.
+
+### 3. Environment Variables & Credential Management
+- **Keep Credentials Out of Git:** Never commit `.env` or files containing real secrets to version control. The repository ignores `.env` and `.env.*` in `.gitignore`. Commit only safe placeholders in `.env.example`.
+- **Production Secrets:** Configure production secrets directly in your hosting dashboard (e.g. Vercel Project Settings or Render Environment settings).
+- **Required in Production:** `SESSION_SECRET` must be set to a strong, random value of at least 32 characters (`node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`). Rotating it invalidates existing user sessions.
+- **Optional Variables:** `GITHUB_TOKEN`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`, `CLIENT_ORIGIN`, `PORT`, `CACHE_TTL_SECONDS`, `SUMMARY_LIMIT_PER_10_MIN`, `SUMMARY_DAILY_CAP`, `TRUST_PROXY`, and `NODE_ENV`. (See the [Environment Variables Reference](#environment-variables-reference) table below for complete details).
+
+### 4. GitHub OAuth Application Configuration
+When configuring your GitHub OAuth App in GitHub Developer Settings:
+- **Homepage URL:** `https://arsenic-rho.vercel.app/` (or local `http://127.0.0.1:5173`)
+- **Authorization Callback URL:** `https://arsenic-rho.vercel.app/auth/github/callback` (or local `http://127.0.0.1:5000/auth/github/callback`)
+- Ensure the production environment variable `GITHUB_CALLBACK_URL` matches this exact registered callback URI.
+
+---
+
+## Security
+
+- **Credential Hygiene & Secret Isolation:**
+  - Keep `.env` and all files containing real credentials out of version control. The repository ignores `.env` and `.env.*` in `.gitignore`. Commit only safe placeholders in `.env.example`.
+  - Never expose GitHub Personal Access Tokens or OAuth client secrets in browser code. All upstream GitHub API communication is proxied through server-side functions.
+- **Encrypted Stateless Sessions (`iron-session`):**
+  - Authentication sessions and guest counters are sealed using AES-256 encryption via `iron-session` and stored in client-side HTTP-only cookies (`cookieName: 'session'`, `SameSite=Lax`, `secure: true` in production, 7-day TTL).
+  - Server-side session storage (such as Redis or database tables) is **not required**. Any serverless function or container instance sharing the same `SESSION_SECRET` can decrypt and validate sessions.
+  - Set a strong, random `SESSION_SECRET` of at least 32 characters in production. Rotating or changing `SESSION_SECRET` immediately invalidates existing user sessions, requiring re-authentication.
+- **CORS & Origin Configuration:**
+  - `CLIENT_ORIGIN` defines the comma-separated whitelist of allowed CORS origins enforced in `server/index.js` and serves as the destination origin to which users are redirected after successful OAuth callback.
+  - `GITHUB_CALLBACK_URL` configures the redirect URI sent to GitHub during authorization and token exchange; it must match your GitHub OAuth application settings.
+- **OAuth CSRF State Verification:**
+  - The OAuth initiation handler generates a cryptographically random `state` nonce, signs it with an HMAC-SHA256 signature using `SESSION_SECRET`, and sets it in an HTTP-only `oauth_state` cookie (`SameSite=Lax`, `Max-Age=600`).
+  - The callback handler verifies the HMAC signature before exchanging the OAuth `code` for an access token, preventing CSRF attacks during authentication.
+- **Security Headers Configuration:**
+  - **In `server/index.js` (configured via Helmet middleware):**
+    - `crossOriginResourcePolicy: { policy: 'cross-origin' }`
+    - Content Security Policy (CSP): restricts `scriptSrc` to `'self'`, allows `'self'` and `'unsafe-inline'` styles, permits images from `'self'`, `data:`, `blob:`, and `https://avatars.githubusercontent.com`, restricts fonts to `'self'` and `data:`, restricts frames to `'self'`, permits form actions to `'self'` and `https://github.com`, and disables plugins (`object-src 'none'`).
+    - `Referrer-Policy: strict-origin-when-cross-origin`
+    - `Strict-Transport-Security` (HSTS): enforced in production with `maxAge: 31536000, includeSubDomains: true`.
+    - Standard Helmet defaults: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-DNS-Prefetch-Control`, `X-Download-Options`.
+  - **In `vercel.json` (configured at the Vercel edge):**
+    - Configures edge response headers applied to all routes `/(.*)`:
+      - `X-Content-Type-Options: nosniff`
+      - `X-Frame-Options: SAMEORIGIN`
+      - `Referrer-Policy: strict-origin-when-cross-origin`
+      - `Strict-Transport-Security: max-age=31536000; includeSubDomains`
+      - `Content-Security-Policy`: full edge CSP directive matching server directives.
+    *(Vercel edge headers provide defense-in-depth on CDN static assets and serverless routes, while Helmet applies protection during local development and standalone Express execution).*
+  - **In `api/meta/[username].js` (configured on social crawler route):**
+    - Explicitly sets `Content-Type: text/html; charset=utf-8`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, and `Referrer-Policy: strict-origin-when-cross-origin` on both 200 and 400 responses.
+- **Input Sanitization & Username Validation:**
+  - Strict regex validation (`/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`) is enforced across all API routes (`/api/dashboard/:username`, `/api/summary/:username`, `/api/compare/:left/:right`, `/api/meta/:username`) before querying upstream GitHub services. Invalid usernames immediately return HTTP 400 and do not consume guest search quota.
 
 ---
 
@@ -315,12 +384,35 @@ The project contains **9 automated test files with 109 passing tests**:
 
 ---
 
-## Data Handling, Limitations & Privacy
+## GitHub Data, Limitations & Privacy
 
 - **Public Event Estimation:** When queried without an authenticated session, activity statistics are estimated from GitHub's public events API (~last 90 days or up to 300 events). Private contributions, older activity, and web-only edits may be omitted.
 - **Deterministic Summaries:** The developer summary engine runs deterministic rule-based algorithms directly on gathered data. It does not send user data to third-party generative AI models.
 - **Rate Limit Transparency:** Unauthenticated guest queries share IP pools limited to 60 requests/hour by GitHub. Authenticating via GitHub increases this limit to 5,000 requests/hour.
 - **Zero Persistent Storage:** Arsenic does not maintain a database. User profiles, tokens, and telemetry are never written to disk or shared with external analytics services.
+
+### Rate Limiting and Caching
+
+- **General API Limiter (`/api/`):**
+  - Configured with `express-rate-limit`. Defaults to **90 requests per minute** (60,000 ms window) per IP address (`standardHeaders: 'draft-8'`, `legacyHeaders: false`).
+- **Developer Summary Endpoint Limiter (`/api/summary/:username`):**
+  - Summary generations are limited to **5 requests per 10 minutes** per IP by default (`windowMs: 10 * 60,000`).
+  - Configurable via the `SUMMARY_LIMIT_PER_10_MIN` environment variable.
+- **Deterministic Summary Daily Cap:**
+  - Overall server-wide daily summary generations default to a cap of **200 per day** (`SUMMARY_DAILY_CAP`).
+  - Tracked via in-memory state (`summaryDay`, `summaryCount`).
+  - **Cached Responses Bypass Daily Cap:** When a summary is requested, `summaryCache` (1-hour TTL) is checked *first*. If a valid cached summary exists, it is returned immediately with `{ cached: true }` *before* the daily summary cap is evaluated. Consequently, cached hits do not increment the daily generation counter (`summaryCount`) and are never blocked when the cap is reached.
+- **In-Memory State & Serverless Execution:**
+  - Arsenic's daily summary counter and caches (`summaryCache`, `cache`, `inflight`) utilize in-memory JavaScript state.
+  - The default `express-rate-limit` store is instance-local (`MemoryStore`).
+  - On Vercel serverless, memory is scoped strictly to an individual warm container instance. State is **not shared globally** between parallel serverless function invocations, differing edge regions, or across cold starts. Counters and in-memory caches may reset whenever an instance restarts or scales to zero.
+  - In a standalone Node/Express container (`npm start`), memory persists across requests for the lifetime of that single process.
+- **Guest Search Allowance & Cookie-Based Tracking:**
+  - Anonymous visitors receive 3 free distinct profile searches, tracked directly within the client's encrypted session cookie (`req.session.searchedProfiles` and `req.session.guestSearches`).
+  - **Limitations of Cookie-Based Tracking:** Because this allowance is held within the sealed browser session cookie rather than a centralized server-side database, the allowance is tied to the client's current browser session. A visitor using private/incognito browsing, switching to another browser, accessing from another device, or clearing browser cookies receives a fresh session cookie with a renewed 3-search allowance. The allowance is an onboarding UX guardrail to encourage GitHub OAuth sign-in, not an adversarial anti-scraping boundary. Upstream GitHub rate limits (60 req/hr unauthenticated IP pool) and local IP rate limits protect backend resources.
+- **Distinction Between Best-Effort Limits & Globally Enforced Quotas:**
+  - All rate limiting, daily summary caps, in-memory caches, and guest search limits in Arsenic operate as **per-instance, best-effort guardrails**.
+  - Enforcing globally synchronized rate limits, persistent multi-region caching, or tamper-proof global guest quotas would require shared distributed infrastructure (such as a managed Redis cluster or external database). Arsenic intentionally avoids introducing Redis or third-party databases to keep the project completely lightweight, self-contained, zero-cost, and effortless to deploy.
 
 ---
 

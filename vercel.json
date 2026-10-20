@@ -25,7 +25,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; form-action 'self' https://github.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com https://lh3.googleusercontent.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; form-action 'self' https://github.com https://accounts.google.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests"
         }
       ]
     }
@@ -38,6 +38,14 @@
     {
       "source": "/auth/github",
       "destination": "/api/auth/github"
+    },
+    {
+      "source": "/auth/google/callback",
+      "destination": "/api/auth/google/callback"
+    },
+    {
+      "source": "/auth/google",
+      "destination": "/api/auth/google"
     },
     {
       "source": "/auth/logout",

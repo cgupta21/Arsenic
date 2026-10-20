@@ -25,6 +25,7 @@
     "helmet": "^8.1.0",
     "html2canvas": "^1.4.1",
     "iron-session": "^8.0.4",
+    "jose": "^6.2.13",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

@@ -18,6 +18,18 @@ import { CompareView } from './components/CompareView'
 
 const fallbackUser = 'cgupta21'
 
+/** Minimal SVG Google logo using official brand colours. */
+function GoogleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
+      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+  )
+}
+
 function routeState() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   if (path.startsWith('/compare')) {
@@ -343,8 +355,8 @@ export default function App() {
             type="button"
             className="privacyBtn"
             onClick={() => setPrivacyOpen(true)}
-            title="GitHub OAuth permissions & privacy"
-            aria-label="GitHub OAuth permissions and privacy note"
+            title="OAuth permissions & privacy"
+            aria-label="OAuth permissions and privacy note"
           >
             <ShieldCheck size={14} />
             <span className="privacyBtnText">Privacy</span>
@@ -355,20 +367,30 @@ export default function App() {
               className="accountBtn"
               onClick={signOut}
               disabled={loggingOut}
-              title={loggingOut ? 'Signing out…' : `Sign out @${sessionUser.login}`}
+              title={loggingOut ? 'Signing out…' : `Sign out ${sessionUser.login}`}
             >
               <img src={sessionUser.avatar_url} alt="" />
               <LogOut size={16} />
             </button>
           ) : (
-            <a
-              className="outlineBtn authBtn"
-              href="/auth/github"
-              title="Sign in with GitHub"
-            >
-              <Github size={16} />
-              <span>Sign in</span>
-            </a>
+            <div className="authBtnGroup">
+              <a
+                className="outlineBtn authBtn"
+                href="/auth/github"
+                title="Sign in with GitHub"
+              >
+                <Github size={16} />
+                <span>GitHub</span>
+              </a>
+              <a
+                className="outlineBtn authBtn googleAuthBtn"
+                href="/auth/google"
+                title="Sign in with Google"
+              >
+                <GoogleIcon />
+                <span>Google</span>
+              </a>
+            </div>
           )}
           <button
             type="button"
@@ -427,8 +449,11 @@ export default function App() {
             <button className="loginPromptClose" onClick={() => setLoginPrompt(false)} aria-label="Close"><X size={17} /></button>
             <div className="loginPromptIcon"><Github size={22} /></div>
             <h2 id="loginPromptTitle">You’ve used your 3 free searches.</h2>
-            <p>Sign in with GitHub to continue analyzing developer profiles without refreshing or losing your place.</p>
-            <a className="primaryBtn loginPromptButton" href="/auth/github"><Github size={16} /> Sign in with GitHub</a>
+            <p>Sign in to continue analyzing developer profiles without losing your place.</p>
+            <div className="loginPromptButtons">
+              <a className="primaryBtn loginPromptButton" href="/auth/github"><Github size={16} /> Sign in with GitHub</a>
+              <a className="outlineBtn loginPromptButton googleAuthBtn" href="/auth/google"><GoogleIcon /> Sign in with Google</a>
+            </div>
             <button type="button" className="privacyLinkBtn" onClick={() => setPrivacyOpen(true)}>
               <ShieldCheck size={13} /> View OAuth scopes & privacy details
             </button>
@@ -567,10 +592,15 @@ function DashboardView({
                   Unauthenticated requests are limited to 60 requests/hour by GitHub. Signing in with GitHub provides an authenticated rate limit of 5,000 requests/hour (note that signing in does not bypass active secondary abuse limits).
                 </p>
                 <div className="stateCardActions">
-                  {!sessionUser && (
-                    <a className="primaryBtn" href="/auth/github">
-                      <Github size={15} /> Sign in with GitHub
-                    </a>
+                {!sessionUser && (
+                    <div className="stateCardAuthBtns">
+                      <a className="primaryBtn" href="/auth/github">
+                        <Github size={15} /> Sign in with GitHub
+                      </a>
+                      <a className="outlineBtn googleAuthBtn" href="/auth/google">
+                        <GoogleIcon /> Sign in with Google
+                      </a>
+                    </div>
                   )}
                   <button type="button" className="ghostBtn" onClick={() => load(username)}>
                     <RefreshCw size={14} /> Retry request
@@ -828,8 +858,8 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
         <div className="privacyHeader">
           <div className="privacyIcon"><ShieldCheck size={24} /></div>
           <div>
-            <h2 id="privacyTitle">GitHub OAuth & Privacy Transparency</h2>
-            <span className="privacySubtitle">Verified scope usage & data handling principles</span>
+            <h2 id="privacyTitle">OAuth &amp; Privacy Transparency</h2>
+            <span className="privacySubtitle">Verified scope usage &amp; data handling principles</span>
           </div>
         </div>
 
@@ -837,26 +867,26 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
           <div className="privacySection">
             <h4>Requested OAuth Scopes</h4>
             <div className="scopeItem">
-              <code>read:user</code>
-              <span>Read-only access to your public profile (avatar, username, display name).</span>
+              <code>read:user, user:email (GitHub)</code>
+              <span>Read-only access to your public profile (avatar, username, display name) and verified email for session authentication.</span>
             </div>
             <div className="scopeItem">
-              <code>user:email</code>
-              <span>Read-only access to verify your primary email for session authentication.</span>
+              <code>openid, email, profile (Google)</code>
+              <span>Read-only verification of your Google account identity and email. Bypasses the guest search limit without accessing private GitHub data.</span>
             </div>
           </div>
 
           <div className="privacySection">
             <h4>What Arsenic Uses Permissions For</h4>
             <ul>
-              <li><strong>Higher API rate limits:</strong> Lifts GitHub API capacity from 60 requests/hour (guest) to 5,000 requests/hour.</li>
-              <li><strong>Self-analytics:</strong> Permits including private contribution counts exclusively on your own dashboard when signed in.</li>
+              <li><strong>Higher API rate limits (GitHub only):</strong> GitHub sign-in lifts API capacity from 60 req/hr (guest) to 5,000 req/hr. Google sign-in uses the shared server token.</li>
+              <li><strong>Self-analytics (GitHub only):</strong> GitHub sign-in permits including your own private contribution counts on your dashboard. Google sign-in removes the guest search limit but does not grant access to private GitHub contributions.</li>
               <li><strong>Zero write operations:</strong> Arsenic requests strictly read-only scopes. It cannot create repositories, commit code, push changes, or alter account settings.</li>
             </ul>
           </div>
 
           <div className="privacySection">
-            <h4>Data Storage & Session Duration</h4>
+            <h4>Data Storage &amp; Session Duration</h4>
             <ul>
               <li><strong>No persistent database:</strong> Arsenic operates without a database (no PostgreSQL, MongoDB, etc.) and does not write profile data or tokens to disk.</li>
               <li><strong>Encrypted session cookie:</strong> Tokens are stored inside a sealed, encrypted HTTP-only browser cookie (<code>iron-session</code>) valid for up to 7 days.</li>
@@ -867,7 +897,7 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
 
           <div className="privacySection">
             <h4>Third-Party Sharing</h4>
-            <p>Arsenic never sells, shares, or transmits user data to third parties, advertising networks, or external telemetry platforms. Communication takes place strictly between your browser and the official GitHub API.</p>
+            <p>Arsenic never sells, shares, or transmits user data to third parties, advertising networks, or external telemetry platforms. Authentication takes place directly through official GitHub or Google authorization endpoints.</p>
           </div>
         </div>
 

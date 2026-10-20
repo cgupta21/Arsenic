@@ -4,7 +4,9 @@ import cors from 'cors'
 import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { getIronSession } from 'iron-session'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import crypto from 'node:crypto'
+import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import fs from 'node:fs'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
@@ -67,11 +69,11 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https://avatars.githubusercontent.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://avatars.githubusercontent.com', 'https://lh3.googleusercontent.com'],
         fontSrc: ["'self'", 'data:'],
         connectSrc: ["'self'"],
         frameAncestors: ["'self'"],
-        formAction: ["'self'", 'https://github.com'],
+        formAction: ["'self'", 'https://github.com', 'https://accounts.google.com'],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
         upgradeInsecureRequests: isProd ? [] : null
@@ -671,13 +673,30 @@ function userCanSeePrivate(req, username) {
   return Boolean(req.session?.githubUser?.login && req.session.githubUser.login.toLowerCase() === username.toLowerCase())
 }
 
+/** Returns true if the request carries a recognised authenticated session (GitHub or Google). */
+function isAuthenticated(req) {
+  return Boolean(req.session?.githubUser || req.session?.googleUser)
+}
+
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, authenticated: Boolean(defaultToken), summaryConfigured: true, summaryMode: 'deterministic', oauthConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) })
+  res.json({
+    ok: true,
+    authenticated: Boolean(defaultToken),
+    summaryConfigured: true,
+    summaryMode: 'deterministic',
+    oauthConfigured: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+    googleOauthConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+  })
 })
 
 app.get('/api/me', (req, res) => {
   res.set('Cache-Control', 'no-store')
-  res.json({ user: req.session?.githubUser || null })
+  // Prefer GitHub identity (has login = GitHub username). Fall back to Google identity.
+  const user = req.session?.githubUser || req.session?.googleUser || null
+  const provider = user
+    ? (req.session?.githubUser ? 'github' : 'google')
+    : null
+  res.json({ user, provider })
 })
 
 app.get('/api/search-history', (_req, res) => {
@@ -689,8 +708,8 @@ const FALLBACK_PROFILE = 'cgupta21'
 app.post('/api/search/consume', async (req, res) => {
   res.set('Cache-Control', 'no-store')
 
-  // Logged-in users have unlimited searches.
-  if (req.session?.githubUser) {
+  // Logged-in users (GitHub or Google) have unlimited searches.
+  if (isAuthenticated(req)) {
     return res.json({
       allowed: true,
       authenticated: true,
@@ -764,7 +783,7 @@ app.get('/api/dashboard/:username', async (req, res) => {
   const token = sessionToken(req)
 
   // Enforce guest search limit on the backend
-  const isAuth = Boolean(req.session?.githubUser)
+  const isAuth = isAuthenticated(req)
   const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
   const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
   const isExemptOrRepeated = lowerUser === FALLBACK_PROFILE.toLowerCase() || searched.includes(lowerUser)
@@ -958,14 +977,20 @@ app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
   }
 })
 
-app.get('/auth/github', (req, res) => {
-  const clientId = process.env.GITHUB_CLIENT_ID
-  if (!clientId) return res.status(501).send('GitHub OAuth is not configured.')
-  const state = crypto.randomBytes(24).toString('hex')
-  // Create a signed state token to prevent tampering
-  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
-  const signedState = `${state}.${signature}`
-  // Set cookie (10 minutes maxAge)
+/** Shared helper: safely append a Set-Cookie header. */
+function appendSetCookie(res, cookieStr) {
+  const existing = res.getHeader('Set-Cookie')
+  if (!existing) {
+    res.setHeader('Set-Cookie', cookieStr)
+  } else if (Array.isArray(existing)) {
+    res.setHeader('Set-Cookie', [...existing, cookieStr])
+  } else {
+    res.setHeader('Set-Cookie', [existing, cookieStr])
+  }
+}
+
+/** Shared helper: set the short-lived signed oauth_state cookie. */
+function setOAuthStateCookie(res, signedState) {
   const cookieParts = [
     `oauth_state=${signedState}`,
     'HttpOnly',
@@ -974,7 +999,51 @@ app.get('/auth/github', (req, res) => {
     'SameSite=Lax',
     isProd ? 'Secure' : ''
   ].filter(Boolean)
-  res.setHeader('Set-Cookie', cookieParts.join('; '))
+  appendSetCookie(res, cookieParts.join('; '))
+}
+
+/** Shared helper: read + clear + verify the oauth_state cookie. Returns {ok, state} or {ok:false}. */
+function consumeOAuthState(req, res, returnedState) {
+  const cookieHeader = req.headers.cookie || ''
+  const match = cookieHeader.match(/(?:^|;\s*)oauth_state=([^;]+)/)
+  const signedState = match ? decodeURIComponent(match[1]) : ''
+  // Clear the cookie immediately (valid or not)
+  const clearParts = [
+    'oauth_state=',
+    'HttpOnly',
+    'Path=/',
+    'Max-Age=0',
+    'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
+    'SameSite=Lax',
+    isProd ? 'Secure' : ''
+  ].filter(Boolean)
+  appendSetCookie(res, clearParts.join('; '))
+  if (!signedState || !returnedState || typeof returnedState !== 'string') return { ok: false }
+  const dotIndex = signedState.indexOf('.')
+  if (dotIndex === -1) return { ok: false }
+  const originalState = signedState.substring(0, dotIndex)
+  const signature = signedState.substring(dotIndex + 1)
+  const expectedSig = crypto.createHmac('sha256', sessionSecret).update(originalState).digest('hex')
+
+  if (returnedState !== originalState) return { ok: false }
+
+  const sigBuf = Buffer.from(signature, 'hex')
+  const expBuf = Buffer.from(expectedSig, 'hex')
+  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+    return { ok: false }
+  }
+
+  return { ok: true, state: originalState }
+}
+
+app.get('/auth/github', (req, res) => {
+  const clientId = process.env.GITHUB_CLIENT_ID
+  if (!clientId) return res.status(501).send('GitHub OAuth is not configured.')
+  const state = crypto.randomBytes(24).toString('hex')
+  // Create a signed state token to prevent tampering
+  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
+  const signedState = `${state}.${signature}`
+  setOAuthStateCookie(res, signedState)
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: process.env.GITHUB_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/github/callback`,
@@ -984,31 +1053,11 @@ app.get('/auth/github', (req, res) => {
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
 })
 
-
-
 app.get('/auth/github/callback', async (req, res) => {
   const { code, state } = req.query
-  // Retrieve and verify signed state from cookie
-  const cookieHeader = req.headers.cookie || ''
-  const match = cookieHeader.match(/oauth_state=([^;]+)/)
-  const signedState = match ? decodeURIComponent(match[1]) : ''
-  // Clear the cookie early (whether valid or not)
-  const clearParts = [
-    'oauth_state=; HttpOnly',
-    'Path=/',
-    'Max-Age=0',
-    isProd ? 'Secure' : ''
-  ].filter(Boolean)
-  res.setHeader('Set-Cookie', clearParts.join('; '))
-  if (!signedState) return res.status(400).send('Invalid OAuth state.')
-  const [originalState, signature] = signedState.split('.')
-  const expectedSig = crypto.createHmac('sha256', sessionSecret).update(originalState).digest('hex')
-  if (state !== originalState || signature !== expectedSig) {
-    return res.status(400).send('Invalid OAuth state.')
-  }
-  // Proceed with OAuth token exchange as before
+  const verification = consumeOAuthState(req, res, state)
+  if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
 
-  // `code` and `state` have been validated above
   try {
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
@@ -1030,8 +1079,112 @@ app.get('/auth/github/callback', async (req, res) => {
     await req.session.save()
     res.redirect(clientOrigins[0])
   } catch (error) {
-    console.error('OAuth callback error:', error)
+    console.error('GitHub OAuth callback error:', error)
     res.status(502).send('GitHub sign-in failed.')
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Google OAuth routes
+// ---------------------------------------------------------------------------
+
+// Lazily initialise the JWKS fetcher so the module can load even when Google
+// credentials are not configured (e.g. during CI test runs).
+let googleJWKS = null
+function getGoogleJWKS() {
+  if (!googleJWKS) {
+    googleJWKS = createRemoteJWKSet(new URL('https://www.googleapis.com/oauth2/v3/certs'))
+  }
+  return googleJWKS
+}
+
+app.get('/auth/google', (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID
+  if (!clientId) return res.status(501).send('Google OAuth is not configured.')
+  const state = crypto.randomBytes(24).toString('hex')
+  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
+  const signedState = `${state}.${signature}`
+  setOAuthStateCookie(res, signedState)
+  const redirectUri = process.env.GOOGLE_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/google/callback`
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'openid email profile',
+    state,
+    access_type: 'online',
+    prompt: 'select_account'
+  })
+  res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`)
+})
+
+app.get('/auth/google/callback', async (req, res) => {
+  const { code, state, error: oauthError } = req.query
+
+  // Google may return an error (e.g. user denied consent)
+  if (oauthError) {
+    console.warn('Google OAuth error from provider:', oauthError)
+    return res.redirect(`${clientOrigins[0]}?auth_error=google_denied`)
+  }
+
+  const verification = consumeOAuthState(req, res, state)
+  if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
+
+  if (!code || typeof code !== 'string') {
+    return res.status(400).send('Missing authorization code.')
+  }
+
+  if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+    return res.status(501).send('Google OAuth is not configured.')
+  }
+
+  try {
+    const redirectUri = process.env.GOOGLE_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/google/callback`
+
+    // Exchange authorisation code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code'
+      }).toString()
+    })
+    const tokenBody = await tokenResponse.json()
+    if (!tokenBody.id_token) {
+      console.error('Google token exchange failed:', tokenBody.error)
+      return res.status(502).send('Google OAuth token exchange failed.')
+    }
+
+    // Verify the ID token: signature, issuer, audience, expiry, subject
+    const { payload } = await jwtVerify(tokenBody.id_token, getGoogleJWKS(), {
+      issuer: ['https://accounts.google.com', 'accounts.google.com'],
+      audience: process.env.GOOGLE_CLIENT_ID,
+      algorithms: ['RS256']
+    })
+
+    if (!payload.sub) return res.status(502).send('Google ID token missing subject.')
+
+    // Store only verified identity — never trust unverified profile data from a body
+    req.session.googleUser = {
+      id: payload.sub,
+      name: typeof payload.name === 'string' ? payload.name : (payload.email ? String(payload.email).split('@')[0] : 'Google User'),
+      email: typeof payload.email === 'string' ? payload.email : null,
+      avatar_url: typeof payload.picture === 'string' ? payload.picture : null,
+      // Expose a stable display handle: prefer email prefix, fallback to sub
+      login: typeof payload.email === 'string'
+        ? payload.email
+        : `google:${payload.sub}`
+    }
+    // Do not overwrite an existing GitHub session unnecessarily
+    await req.session.save()
+    res.redirect(clientOrigins[0])
+  } catch (error) {
+    console.error('Google OAuth callback error:', error)
+    res.status(502).send('Google sign-in failed.')
   }
 })
 

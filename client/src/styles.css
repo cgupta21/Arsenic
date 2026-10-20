@@ -147,6 +147,11 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .outlineBtn, .ghostBtn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border); color: var(--text); text-decoration: none; padding: 9px 13px; border-radius: 9px; font-size: 12px; font-weight: 700; background: var(--card); }
 .outlineBtn:hover, .ghostBtn:hover { border-color: var(--terracotta); }
 .authBtn { white-space: nowrap; height: 44px; min-height: 44px; padding: 0 14px; box-sizing: border-box; }
+.authBtnGroup { display: flex; align-items: center; gap: 6px; }
+.googleAuthBtn:hover { border-color: #4285F4; }
+.loginPromptButtons { display: flex; flex-direction: column; gap: 9px; width: 100%; }
+.loginPromptButtons .loginPromptButton { width: 100%; }
+.stateCardAuthBtns { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
 .statsGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 10px 0; }
 .stat { border: 1px solid var(--border); background: var(--card); padding: 17px; border-radius: 12px; min-width: 0; }
 .statIcon { color: var(--muted); margin-bottom: 14px; }
@@ -889,6 +894,18 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   .stateCardActions a {
     width: 100%;
     justify-content: center;
+  }
+  .stateCardAuthBtns {
+    width: 100%;
+    flex-direction: column;
+  }
+  .authBtn {
+    padding: 0 10px;
+    font-size: 11px;
+    gap: 5px;
+  }
+  .authBtnGroup {
+    gap: 4px;
   }
   .footerBottom {
     flex-direction: column;

@@ -88,5 +88,5 @@ export async function generateSummary(username: string) {
 }
 
 export async function getSessionUser() {
-  return request<{ user: { login: string; name: string | null; avatar_url: string } | null }>('/api/me')
+  return request<{ user: { login: string; name: string | null; avatar_url: string } | null; provider?: 'github' | 'google' | null }>('/api/me')
 }

@@ -18,16 +18,37 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 
-const isProd = process.env.NODE_ENV === 'production'
+const fallbackSessionSecret = 'arsenic-local-secret-change-me-32-chars!!'
 
-const sessionSecret = process.env.SESSION_SECRET || ''
-if (isProd && (sessionSecret.length < 32 || /^change-this/i.test(sessionSecret))) {
-  console.error('SESSION_SECRET must be a random value of at least 32 characters in production.')
-  // Do not terminate the process; continue with a fallback secret.
+function isPlaceholderSecret(secret) {
+  if (!secret || typeof secret !== 'string') return true
+  const trimmed = secret.trim()
+  if (trimmed.length < 32) return true
+  if (/^(change-this|change-me|placeholder|your-secret)/i.test(trimmed)) return true
+  if (/change-this|change-me/i.test(trimmed)) return true
+  if (trimmed === fallbackSessionSecret) return true
+  return false
 }
 
+function resolveSessionSecret(env = process.env) {
+  const isProduction = env.NODE_ENV === 'production'
+  const rawSecret = env.SESSION_SECRET || ''
+  if (isProduction) {
+    if (isPlaceholderSecret(rawSecret)) {
+      throw new Error(
+        'SESSION_SECRET must be set to a secure, random string of at least 32 characters in production. Fallback secret is not permitted in production.'
+      )
+    }
+    return rawSecret.trim()
+  }
+  return rawSecret.trim() || fallbackSessionSecret
+}
+
+const isProd = process.env.NODE_ENV === 'production'
+const sessionSecret = resolveSessionSecret(process.env)
+
 const sessionOptions = {
-  password: sessionSecret || 'arsenic-local-secret-change-me-32-chars!!',
+  password: sessionSecret,
   cookieName: 'session',
   ttl: 7 * 24 * 60 * 60,
   cookieOptions: {
@@ -1262,7 +1283,15 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' })
 })
 
-export { calculateStreaks, flattenCalendar, isValidGitHubUsername, GITHUB_USERNAME_REGEX }
+export {
+  calculateStreaks,
+  flattenCalendar,
+  isValidGitHubUsername,
+  GITHUB_USERNAME_REGEX,
+  fallbackSessionSecret,
+  isPlaceholderSecret,
+  resolveSessionSecret
+}
 export default app
 
 if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {

@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { spawnSync } from 'node:child_process'
 // @ts-expect-error – server/index.js is plain JS without declaration files
-import app from '../server/index.js'
+import app, { fallbackSessionSecret, isPlaceholderSecret, resolveSessionSecret } from '../server/index.js'
 import { isValidGitHubUsername, validateGitHubUsername } from '../shared/validation.js'
 import { normalizeGithubInput } from '../client/src/lib/normalizeGithubInput.js'
 
@@ -268,5 +269,100 @@ describe('Mobile Export Hardening & Asset Integrity', () => {
     expect(doc.getNumberOfPages()).toBe(1)
     const output = doc.output('blob')
     expect(output.size).toBeGreaterThan(0)
+  })
+})
+
+describe('Production SESSION_SECRET security enforcement', () => {
+  it('identifies missing, short, or placeholder secrets', () => {
+    expect(isPlaceholderSecret('')).toBe(true)
+    expect(isPlaceholderSecret(undefined)).toBe(true)
+    expect(isPlaceholderSecret('short')).toBe(true)
+    expect(isPlaceholderSecret('change-this-secret')).toBe(true)
+    expect(isPlaceholderSecret('change-this-dummy-secret-longer-than-32-chars')).toBe(true)
+    expect(isPlaceholderSecret('change-me-please-secret-longer-than-32-chars')).toBe(true)
+    expect(isPlaceholderSecret(fallbackSessionSecret)).toBe(true)
+    expect(isPlaceholderSecret('placeholder-secret-that-has-over-32-characters')).toBe(true)
+  })
+
+  it('accepts high-entropy random secrets of 32+ characters', () => {
+    expect(isPlaceholderSecret('5cc5652f2115ccaafaa2ffb38095f62e7b90049ecae734e55bf3ee1c8581f893')).toBe(false)
+    expect(isPlaceholderSecret('super-secret-random-key-with-plenty-of-bytes-12345')).toBe(false)
+  })
+
+  it('rejects missing or empty SESSION_SECRET in production', () => {
+    expect(() => resolveSessionSecret({ NODE_ENV: 'production' })).toThrow(
+      /SESSION_SECRET must be set to a secure, random string/i
+    )
+    expect(() => resolveSessionSecret({ NODE_ENV: 'production', SESSION_SECRET: '' })).toThrow(
+      /SESSION_SECRET must be set to a secure, random string/i
+    )
+  })
+
+  it('rejects secrets shorter than 32 characters in production', () => {
+    expect(() => resolveSessionSecret({ NODE_ENV: 'production', SESSION_SECRET: 'short-secret' })).toThrow(
+      /SESSION_SECRET must be set to a secure, random string/i
+    )
+  })
+
+  it('rejects placeholder secrets in production', () => {
+    expect(() =>
+      resolveSessionSecret({
+        NODE_ENV: 'production',
+        SESSION_SECRET: 'change-this-production-placeholder-secret-32',
+      })
+    ).toThrow(/SESSION_SECRET must be set to a secure, random string/i)
+    expect(() =>
+      resolveSessionSecret({
+        NODE_ENV: 'production',
+        SESSION_SECRET: 'change-me-production-secret-longer-than-32',
+      })
+    ).toThrow(/SESSION_SECRET must be set to a secure, random string/i)
+  })
+
+  it('NEVER permits the hardcoded fallback secret in production', () => {
+    expect(() =>
+      resolveSessionSecret({
+        NODE_ENV: 'production',
+        SESSION_SECRET: fallbackSessionSecret,
+      })
+    ).toThrow(/Fallback secret is not permitted in production/i)
+  })
+
+  it('accepts valid 32+ character secrets in production', () => {
+    const validSecret = '5cc5652f2115ccaafaa2ffb38095f62e7b90049ecae734e55bf3ee1c8581f893'
+    expect(resolveSessionSecret({ NODE_ENV: 'production', SESSION_SECRET: validSecret })).toBe(validSecret)
+  })
+
+  it('uses development/test fallback secret when NODE_ENV is not production', () => {
+    expect(resolveSessionSecret({ NODE_ENV: 'development' })).toBe(fallbackSessionSecret)
+    expect(resolveSessionSecret({ NODE_ENV: 'test' })).toBe(fallbackSessionSecret)
+    expect(resolveSessionSecret({})).toBe(fallbackSessionSecret)
+  })
+
+  it('fails process startup when NODE_ENV=production and SESSION_SECRET is missing or invalid', () => {
+    const result = spawnSync(process.execPath, ['-e', 'import("./server/index.js")'], {
+      env: { ...process.env, NODE_ENV: 'production', SESSION_SECRET: '' },
+      encoding: 'utf-8',
+    })
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('SESSION_SECRET must be set to a secure, random string')
+  })
+
+  it('succeeds process startup when NODE_ENV=production and a valid SESSION_SECRET is provided', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['-e', 'import("./server/index.js").then(() => { console.log("BOOT_OK"); process.exit(0) })'],
+      {
+        env: {
+          ...process.env,
+          NODE_ENV: 'production',
+          SESSION_SECRET: '5cc5652f2115ccaafaa2ffb38095f62e7b90049ecae734e55bf3ee1c8581f893',
+          PORT: '0',
+        },
+        encoding: 'utf-8',
+      }
+    )
+    expect(result.status).toBe(0)
+    expect(result.stdout).toContain('BOOT_OK')
   })
 })

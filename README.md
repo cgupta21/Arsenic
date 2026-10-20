@@ -98,14 +98,23 @@ Clean, branded summary card designed for portfolio integration, technical interv
 
 ### Sharing, SEO & Social Crawlers
 - Pre-rendered Open Graph and Twitter Cards (`summary_large_image`) with exact 1200 × 630 px preview assets.
-- Serverless crawler edge rewrites delivering profile-specific meta tags (`/u/:username`) to bots without client JS execution.
+- Serverless crawler edge route (`/u/:username` rewritten to `api/meta/[username].js`) delivering profile-specific Open Graph and Twitter Card metadata to social bots without running the client-side SPA.
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
 
-### Security & Privacy Transparency
-- Strictly read-only GitHub OAuth permissions (`read:user user:email`).
-- Zero repository write scopes, administrative privileges, or organization access requested.
-- Sealed, encrypted HTTP-only cookies (`iron-session`) with 7-day TTL; destroyed immediately on sign-out.
-- No persistent database storing tokens or personal information; zero third-party telemetry or ad tracking.
+### Security & Session Architecture
+- **Stateless Encrypted Sessions (`iron-session`):** Authentication credentials and session states are sealed inside encrypted, HTTP-only, `SameSite=Lax` browser cookies with a 7-day TTL (`secure: true` in production). Sessions are destroyed immediately on sign-out (`Max-Age=0`).
+- **Multi-Instance Ready without Redis:** Because session state is stored entirely client-side in encrypted cookies, horizontal scaling across multiple server instances or ephemeral serverless functions does **not** require Redis or a centralized session database. Any instance sharing the same `SESSION_SECRET` can decrypt and validate sessions.
+- **Cookie-Based Guest Search Allowance:**
+  - Anonymous visitors receive a quota of **three (3) distinct successful profile analyses** before being prompted to sign in with GitHub.
+  - **Quota Preservation:**
+    - **Repeated searches:** Viewing a profile already analyzed in the current session does not consume additional attempts.
+    - **Failed requests:** 400 (invalid username), 404 (user not found), 429 (rate-limited), and 500 (upstream outage) errors never consume guest search attempts.
+    - **Authenticated users:** Completely exempt with unlimited searches.
+    - **Showcase profile:** The configured showcase account (`cgupta21`) is exempt from quota consumption.
+  - **Cookie-Based Tracking & Limitations:** The guest allowance is tracked directly in the user's encrypted session cookie (`req.session.searchedProfiles`). It is not a centralized server-side counter or an abuse prevention boundary; visitors can reset their quota simply by clearing browser cookies, using private/incognito browsing, or switching browsers. The limit is intended as a frictionless onboarding guardrail to encourage GitHub sign-in, while backend abuse is mitigated by upstream GitHub IP rate limits and local rate limiters.
+- **Strictly Read-Only OAuth Scopes:** Requests only `read:user user:email`. Zero repository write scopes, organization administration, or workflow permissions are requested.
+- **No Persistent Storage:** Zero database connections, user profiles, or access tokens stored on disk.
+- **Security Headers (Helmet & Vercel Edge):** Enforces Content-Security-Policy (CSP), `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security` (HSTS).
 
 ---
 
@@ -121,7 +130,7 @@ Clean, branded summary card designed for portfolio integration, technical interv
 
 ### 3. Implementing Unauthenticated Guest Quotas with Secure Stateless Auth
 - **Challenge:** Preventing automated scraping and API abuse on the public web app while maintaining a frictionless onboarding experience for visitors who do not want to sign in immediately.
-- **Implementation & Learning:** Implemented an IP-aware guest search counter in `server/index.js` backed by an in-memory session store (`memorystore`). Guests receive 5 free in-depth analyses before being prompted to sign in. Crucially, I engineered the middleware so that failed queries (e.g., 404 user not found or 400 invalid usernames) do not consume a guest's search credit. For authenticated users, I used `iron-session` to encrypt sessions inside a tamper-proof cookie, avoiding database connection latency and security risks associated with storing access tokens on a server.
+- **Implementation & Learning:** Implemented a stateless guest search allowance in `server/index.js` backed by encrypted client cookies via `iron-session`. Guests receive 3 distinct successful profile analyses before being prompted to sign in. Crucially, I engineered the middleware so that failed queries (e.g., 404 user not found or 400 invalid usernames) and repeated visits to already-analyzed profiles do not consume a guest's search credit, and the showcase account (`@cgupta21`) is exempt. For authenticated users, `iron-session` encrypts the GitHub access token inside an encrypted cookie, avoiding database connection latency, eliminating the need for a centralized session store (such as Redis) across serverless instances, and preventing access token leakage.
 
 ### 4. Responsive Mobile Navigation & Accessibility Engineering
 - **Challenge:** On real mobile devices, navigation controls were overlapping, hamburger click handlers were failing to toggle menus properly, background content scrolled while menus were open, and touch targets were difficult to tap accurately.
@@ -141,17 +150,17 @@ Clean, branded summary card designed for portfolio integration, technical interv
                |          (React 18 + TypeScript + Vite + CSS)         |
                +---------------------------+---------------------------+
                                            |
-                   +-----------------------+-----------------------+
-                   |                                               |
-      (API / Auth / Proxy)                             (Direct Crawler Hits)
-                   v                                               v
+                    +-----------------------+-----------------------+
+                    |                                               |
+       (API / Auth / Proxy)                             (Direct Crawler Hits)
+                    v                                               v
 +--------------------------------------+       +---------------------------------------+
-|            Express Backend           |       |        Vercel Edge Rewrite            |
-|       (or Vercel Serverless)         |       |      (has User-Agent: *bot*)          |
+|        Vercel Serverless Functions   |       |        Vercel Edge Rewrite            |
+|       (api/* → Express app handler)  |       |      (has User-Agent: *bot*)          |
 +------------------+-------------------+       +-------------------+-------------------+
                    |                                               |
-                   |                                               v
-                   |                               +-----------------------------------+
+                   | (Optional Standalone:                         v
+                   |  node server/index.js)        +-----------------------------------+
                    |                               |      api/meta/[username].js       |
                    |                               |  (Pre-rendered OG/Twitter HTML)   |
                    |                               +-----------------------------------+
@@ -160,11 +169,26 @@ Clean, branded summary card designed for portfolio integration, technical interv
    |                               |                               |
    v                               v                               v
 +--------------------+   +--------------------+          +--------------------+
-|  GitHub REST API   |   | GitHub GraphQL API |          | In-Memory RAM Cache|
-| (Events, Repos,    |   | (1-Yr Calendar,    |          | (10-min TTL,       |
-|  Languages, Users) |   |  Private Counts)   |          |  Deduplication)    |
+|  GitHub REST API   |   | GitHub GraphQL API |          | Ephemeral In-Memory|
+| (Events, Repos,    |   | (1-Yr Calendar,    |          | RAM Cache (Map)    |
+|  Languages, Users) |   |  Private Counts)   |          | (Per-instance TTL) |
 +--------------------+   +--------------------+          +--------------------+
 ```
+
+### Production Deployment vs. Standalone Architecture
+
+- **Production Deployment (Vercel):**
+  - **Frontend:** Built with Vite (`npm run build`) and served as a static Single Page Application from `client/dist` via Vercel's global CDN edge network.
+  - **API Endpoints:** Handled by serverless function routes in `api/` (such as `api/[...path].js`, `api/dashboard/[username].js`, and `api/compare/[left]/[right].js`). These functions act as thin serverless adapters that instantiate and route incoming requests into the core Express application exported from `server/index.js`.
+  - **Crawler Metadata Route:** Social crawlers requesting `/u/:username` are intercepted at the edge via `vercel.json` rewrites and routed to `api/meta/[username].js`, which returns lightweight Open Graph / Twitter Card HTML without loading the SPA.
+- **Optional Standalone Express Deployment (e.g. Render / Railway / Docker):**
+  - `server/index.js` contains a standalone entry point (`if (process.env.VERCEL !== '1') app.listen(PORT)`).
+  - Can be deployed as a traditional long-running Node/Express container via `npm start`. This is an optional alternative deployment target, not the current primary production environment.
+- **In-Memory Cache Realities & Limitations:**
+  - Arsenic uses in-memory JavaScript `Map` data structures (`cache`, `inflight`, `summaryCache`) with a 10-minute TTL.
+  - **In Serverless (Vercel):** Memory is scoped strictly to an individual warm container instance. Caches are **not automatically shared** across parallel serverless invocations, regions, or cold starts. When requests route to a different serverless instance or after an instance scales to zero, cache misses occur and fresh data is fetched from GitHub. In-flight request deduplication only deduplicates concurrent requests hitting the same active container.
+  - **In Standalone Server:** The in-memory cache persists across all requests for the lifetime of that single Node process.
+  - In all environments, the cache is volatile and ephemeral; it is never written to disk or shared via an external distributed cache.
 
 ---
 
@@ -176,9 +200,9 @@ Clean, branded summary card designed for portfolio integration, technical interv
 | **Data Visualization** | Recharts, Custom CSS/SVG | Heatmaps, trend curves, and timing patterns |
 | **Icons & Styling** | Lucide React, Vanilla CSS | Lightweight UI without Tailwind overhead |
 | **Export Engines** | html2canvas, jsPDF | Client-side PNG and vector PDF report generation |
-| **Backend Runtime** | Node.js, Express | API orchestration, caching, and rate limiting |
-| **Session & Auth** | iron-session, memorystore | Sealed encrypted cookies and guest quota tracking |
-| **Security Headers** | Helmet, CORS | Secure HTTP headers and origin enforcement |
+| **Backend Runtime** | Node.js, Express | API orchestration, caching, and rate limiting (used by Vercel serverless functions and local dev) |
+| **Session & Auth** | iron-session | Sealed encrypted cookies for authentication and guest quota tracking without Redis |
+| **Security Headers** | Helmet, CORS | Secure HTTP headers (CSP, HSTS, X-Frame-Options) and origin enforcement |
 | **External APIs** | GitHub REST API, GitHub GraphQL | Raw developer telemetry and contribution calendars |
 | **Testing Suite** | Vitest, TypeScript compiler | Unit, integration, and accessibility test suite |
 | **Hosting & CI** | Vercel, GitHub Actions | Automated lint/test/build pipeline and edge hosting |
@@ -204,36 +228,28 @@ npm install
 ```
 
 ### 3. Configure local environment variables
-Create a `.env` file in the root directory:
+Create a `.env` file in the root directory by copying the example template:
 ```bash
 cp .env.example .env
 ```
+> **Security Notice:** `.env` is ignored by Git in `.gitignore` and must **never** be committed to the repository. The template `.env.example` contains only safe placeholder values.
 
-Populate the following variables:
-```env
-# GitHub Personal Access Token (increases local API limit from 60 to 5,000 req/hr)
-GITHUB_TOKEN=your_github_personal_access_token
+#### Environment Variables Reference
 
-# Express Server Port & Allowed Frontend Origin
-PORT=5000
-CLIENT_ORIGIN=http://127.0.0.1:5173
-
-# Random 32+ character secret for encrypted iron-session cookies
-SESSION_SECRET=your_random_32_character_secret_here
-
-# Optional: GitHub OAuth App Credentials (for Sign-In functionality)
-GITHUB_CLIENT_ID=your_oauth_client_id
-GITHUB_CLIENT_SECRET=your_oauth_client_secret
-GITHUB_CALLBACK_URL=http://127.0.0.1:5000/auth/github/callback
-
-# Cache Duration in Seconds (Default: 600 = 10 minutes)
-CACHE_TTL_SECONDS=600
-```
-
-> **Tip:** Generate a secure random 32-character session secret using Node:
-> ```bash
-> node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-> ```
+| Variable | Required? | Default / Example | Purpose & Behavior if Absent |
+|:---|:---:|:---|:---|
+| `SESSION_SECRET` | **Required in Prod**<br>*(Optional in Dev)* | `change-this-secret` | 32+ character random string used by `iron-session` to encrypt session cookies.<br>• **If absent in production (`NODE_ENV=production`) or <32 chars:** Application logs an error and uses an unsafe fallback.<br>• **Safe generation:** `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `GITHUB_TOKEN` | Optional | *(Empty)* | GitHub Personal Access Token (classic with `read:user` or fine-grained).<br>• **If present:** Enables server-side GitHub GraphQL queries (full 1-year contribution calendars, exact repository byte counts) and provides a 5,000 req/hr rate limit pool for unauthenticated queries.<br>• **If absent:** Application operates in **Public API Mode**, gracefully estimating recent activity (~90 days / up to 300 events) via public REST endpoints with GitHub's 60 req/hr unauthenticated IP limit. |
+| `GITHUB_CLIENT_ID` | Optional | *(Empty)* | GitHub OAuth App Client ID.<br>• **If absent:** "Sign in with GitHub" is disabled. Visiting `/auth/github` returns HTTP 503 (`GitHub sign-in is not configured on this server.`). Public profile analytics, comparisons, deterministic summaries, and card exports remain fully accessible without sign-in. |
+| `GITHUB_CLIENT_SECRET` | Optional | *(Empty)* | GitHub OAuth App Client Secret.<br>• Must be paired with `GITHUB_CLIENT_ID`. If either is missing, OAuth sign-in is disabled. |
+| `GITHUB_CALLBACK_URL` | Optional | `http://127.0.0.1:5000/auth/github/callback` | OAuth redirect URI registered in your GitHub OAuth App settings.<br>• In production on Vercel, set to `https://<your-domain>/api/auth/github/callback`. |
+| `CLIENT_ORIGIN` | Optional | `http://127.0.0.1:5173,http://localhost:5173` | Comma-separated list of allowed CORS origins for the Express server. |
+| `PORT` | Optional | `5000` | Port for the standalone Node/Express server in local development or container deployments (ignored by Vercel serverless execution). |
+| `CACHE_TTL_SECONDS` | Optional | `600` | In-memory RAM cache duration in seconds (10 minutes, enforced minimum 60s) for profile data. |
+| `SUMMARY_LIMIT_PER_10_MIN` | Optional | `5` | Rate limit ceiling for deterministic developer summary generations per IP within a 10-minute window. |
+| `SUMMARY_DAILY_CAP` | Optional | `200` | Maximum number of developer summaries generated server-wide per day. |
+| `TRUST_PROXY` | Optional | `1` *(in prod)* | Express `trust proxy` setting for deployments behind reverse proxies (Vercel, Render, Railway, Fly), ensuring secure cookies and client IP rate limiting function properly. |
+| `NODE_ENV` | Optional | `development` | Setting to `production` enables secure cookies (`secure: true`), strict HSTS headers, and enforces `SESSION_SECRET` randomness validation. |
 
 ### 4. Start the development server
 ```bash
@@ -271,20 +287,21 @@ npm run build
 
 ### What the Existing Tests Cover
 
-The project contains **8 automated test files with 93 passing tests**:
+The project contains **9 automated test files with 109 passing tests**:
 
 | Test Suite | File | Tests | Key Behaviors Verified |
 |:---|:---|:---:|:---|
 | **Mobile Nav & Header** | [`tests/mobileNav.test.ts`](tests/mobileNav.test.ts) | 25 | Semantic `<nav>`, `aria-expanded` and `aria-controls` bindings, mobile touch targets ($\ge 44\text{px}$), body scroll lock, Escape key dismiss, and responsive layout rules. |
 | **Website Improvements** | [`tests/websiteImprovements.test.ts`](tests/websiteImprovements.test.ts) | 21 | Open Graph / Twitter Card tags, exact 1200 × 630 px preview image binary dimensions, crawler edge rewrites, read-only OAuth scopes, privacy disclosures, and Scenarios A–E error UI. |
 | **Streak Algorithms** | [`tests/streaks.test.ts`](tests/streaks.test.ts) | 18 | Daily contribution streak algorithms, leap year calculations, timezone offsets, weekend gaps, and active day counting. |
-| **Guest Search Limits** | [`tests/searchLimit.test.ts`](tests/searchLimit.test.ts) | 8 | Guest quota enforcement (5 free searches), memory-store tracking, and verification that 404/400 errors do not consume credits. |
+| **Security Hardening** | [`tests/securityHardening.test.ts`](tests/securityHardening.test.ts) | 16 | Helmet security headers, tailored Content Security Policy (CSP), Vercel edge configuration, strict GitHub username regex validation, crawler 400 security headers, and direct canvas-to-jsPDF embedding. |
+| **Guest Search Limits** | [`tests/searchLimit.test.ts`](tests/searchLimit.test.ts) | 8 | Guest quota enforcement (3 free distinct profile searches), cookie-based tracking, and verification that 400/404 errors do not consume credits. |
 | **Session & Logout** | [`tests/logout.test.ts`](tests/logout.test.ts) | 7 | Session termination on `POST /auth/logout`, cookie invalidation (`Max-Age=0`), cache-control headers, and session destruction. |
 | **Analytics & Scoring** | [`tests/analytics.test.ts`](tests/analytics.test.ts) | 6 | Score calculation weighting (Consistency, Collaboration, Impact), normalization to 100, and repository health status rules. |
 | **Developer Comparison** | [`tests/compare.test.ts`](tests/compare.test.ts) | 6 | Side-by-side comparison API endpoint, parallel developer fetching, delta calculations, and 400 validation for invalid names. |
 | **Authentication Errors** | [`tests/authError.test.tsx`](tests/authError.test.tsx) | 2 | Client request wrapper capturing 401 token expiration and attaching `authError: true` to trigger appropriate re-authentication UI. |
 
-> **Note on Code Coverage:** Arsenic executes 93 unit and integration tests across 8 suites on every pull request via GitHub Actions. Code coverage percentage is not currently measured by the test harness, and no unverified coverage metrics are claimed.
+> **Note on Code Coverage:** Arsenic executes 109 unit and integration tests across 9 suites on every pull request via GitHub Actions. Code coverage percentage is not currently measured by the test harness, and no unverified coverage metrics are claimed.
 
 ---
 

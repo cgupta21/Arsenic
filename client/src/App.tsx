@@ -15,6 +15,8 @@ import { RepoCard } from './components/RepoCard'
 import { ScoreBreakdown } from './components/ScoreBreakdown'
 import { TimingPatterns } from './components/TimingPatterns'
 import { CompareView } from './components/CompareView'
+import { LandingPage } from './components/LandingPage'
+import { RegisterPage } from './components/RegisterPage'
 
 const fallbackUser = 'cgupta21'
 
@@ -32,12 +34,21 @@ function GoogleIcon() {
 
 function routeState() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/register') {
+    return { mode: 'register' as const, username: '', left: '', right: '' }
+  }
   if (path.startsWith('/compare')) {
     const params = new URLSearchParams(window.location.search)
     return { mode: 'compare' as const, username: '', left: params.get('a') || 'octocat', right: params.get('b') || 'torvalds' }
   }
   const match = path.match(/^\/u\/([^/]+)$/)
-  return { mode: 'dashboard' as const, username: match ? decodeURIComponent(match[1]) : fallbackUser, left: '', right: '' }
+  if (match) {
+    return { mode: 'dashboard' as const, username: decodeURIComponent(match[1]), left: '', right: '' }
+  }
+  if (path === '/dashboard') {
+    return { mode: 'dashboard' as const, username: fallbackUser, left: '', right: '' }
+  }
+  return { mode: 'landing' as const, username: '', left: '', right: '' }
 }
 
 function pushRoute(next: string) {
@@ -98,25 +109,53 @@ export default function App() {
   }, [])
 
   useEffect(() => { void loadSessionUser() }, [loadSessionUser])
+
   useEffect(() => {
-    const title = route.mode === 'compare'
-      ? 'Arsenic — Compare Developers'
-      : route.username
-        ? `Arsenic — @${route.username}`
-        : 'Arsenic — Developer Intelligence'
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get('auth_error')
+    if (err) {
+      const message = err === 'google_denied'
+        ? 'Google sign-in was canceled or access was denied.'
+        : err.includes('not_configured')
+          ? 'OAuth authentication is not configured on this server.'
+          : `Authentication could not be completed (${err}).`
+      setToast({ message, type: 'error' })
+      params.delete('auth_error')
+      const nextQuery = params.toString() ? `?${params.toString()}` : ''
+      window.history.replaceState({}, '', `${window.location.pathname}${nextQuery}`)
+    }
+  }, [])
+  useEffect(() => {
+    const title = route.mode === 'landing'
+      ? 'Arsenic — Understand Any GitHub Repository'
+      : route.mode === 'register'
+        ? 'Arsenic — Start Exploring GitHub Intelligence'
+        : route.mode === 'compare'
+          ? 'Arsenic — Compare Developers'
+          : route.username
+            ? `Arsenic — @${route.username}`
+            : 'Arsenic — Developer Intelligence'
     document.title = title
 
-    const desc = route.mode === 'compare'
-      ? 'Compare GitHub developers head-to-head across streaks, collaboration and repository health.'
-      : route.username
-        ? `GitHub developer intelligence, contribution patterns and repository health for @${route.username} on Arsenic.`
-        : 'Arsenic — GitHub developer intelligence, contribution patterns and repository health.'
+    const desc = route.mode === 'landing'
+      ? 'Understand any GitHub repository. Turn repository activity and developer signals into useful insights.'
+      : route.mode === 'register'
+        ? 'Create your Arsenic account or continue with GitHub or Google for unlimited repository intelligence.'
+        : route.mode === 'compare'
+          ? 'Compare GitHub developers head-to-head across streaks, collaboration and repository health.'
+          : route.username
+            ? `GitHub developer intelligence, contribution patterns and repository health for @${route.username} on Arsenic.`
+            : 'Arsenic — GitHub developer intelligence, contribution patterns and repository health.'
 
-    const url = route.mode === 'compare'
-      ? 'https://arsenic-rho.vercel.app/compare'
-      : route.username
-        ? `https://arsenic-rho.vercel.app/u/${encodeURIComponent(route.username)}`
-        : 'https://arsenic-rho.vercel.app/'
+    const url = route.mode === 'landing'
+      ? 'https://arsenic-rho.vercel.app/'
+      : route.mode === 'register'
+        ? 'https://arsenic-rho.vercel.app/register'
+        : route.mode === 'compare'
+          ? 'https://arsenic-rho.vercel.app/compare'
+          : route.username
+            ? `https://arsenic-rho.vercel.app/u/${encodeURIComponent(route.username)}`
+            : 'https://arsenic-rho.vercel.app/'
 
     const setMeta = (attr: string, key: string, content: string) => {
       let el = document.querySelector(`meta[${attr}="${key}"]`)
@@ -289,9 +328,13 @@ export default function App() {
           type="button"
           className="brand brandButton"
           onClick={() => {
-            pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+            if (route.mode === 'landing') {
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            } else {
+              pushRoute('/')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
             setMenu(false)
-            window.scrollTo({ top: 0, behavior: 'smooth' })
           }}
           aria-label="Go to Arsenic home"
         >
@@ -303,51 +346,136 @@ export default function App() {
           className={menu ? 'nav open' : 'nav'}
           aria-label="Primary navigation"
         >
-          <a
-            href={`/u/${encodeURIComponent(route.username || fallbackUser)}#overview`}
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo('overview')
-            }}
-          >
-            Overview
-          </a>
-          <a
-            href="#activity"
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo('activity')
-            }}
-          >
-            Activity
-          </a>
-          <a
-            href="#repositories"
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo('repositories')
-            }}
-          >
-            Repositories
-          </a>
-          <a
-            href="#insights"
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo('insights')
-            }}
-          >
-            Insights
-          </a>
-          <a
-            href="/compare"
-            onClick={(e) => {
-              e.preventDefault()
-              navigateTo('compare')
-            }}
-          >
-            Compare
-          </a>
+          {route.mode === 'landing' ? (
+            <>
+              <a
+                href="#features"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                Features
+              </a>
+              <a
+                href="#how-it-works"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                How It Works
+              </a>
+              <a
+                href="/compare"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('compare')
+                }}
+              >
+                Compare
+              </a>
+              <a
+                href={`/u/${encodeURIComponent(fallbackUser)}`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+                }}
+              >
+                Explore Showcase
+              </a>
+            </>
+          ) : route.mode === 'register' ? (
+            <>
+              <a
+                href="/"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  pushRoute('/')
+                }}
+              >
+                Home
+              </a>
+              <a
+                href="/#features"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  pushRoute('/')
+                  setTimeout(() => {
+                    document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })
+                  }, 100)
+                }}
+              >
+                Features
+              </a>
+              <a
+                href="/#how-it-works"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  pushRoute('/')
+                  setTimeout(() => {
+                    document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })
+                  }, 100)
+                }}
+              >
+                How It Works
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href={`/u/${encodeURIComponent(route.username || fallbackUser)}#overview`}
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('overview')
+                }}
+              >
+                Overview
+              </a>
+              <a
+                href="#activity"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('activity')
+                }}
+              >
+                Activity
+              </a>
+              <a
+                href="#repositories"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('repositories')
+                }}
+              >
+                Repositories
+              </a>
+              <a
+                href="#insights"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('insights')
+                }}
+              >
+                Insights
+              </a>
+              <a
+                href="/compare"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigateTo('compare')
+                }}
+              >
+                Compare
+              </a>
+            </>
+          )}
         </nav>
 
         <div className="actions">
@@ -367,30 +495,63 @@ export default function App() {
               className="accountBtn"
               onClick={signOut}
               disabled={loggingOut}
-              title={loggingOut ? 'Signing out…' : `Sign out ${sessionUser.login}`}
+              title={loggingOut ? 'Signing out…' : `Sign out ${sessionUser.name || sessionUser.login}`}
             >
-              <img src={sessionUser.avatar_url} alt="" />
+              <img src={sessionUser.avatar_url || '/assets/arsenic-mark.svg'} alt="" />
+              <span className="accountName">{sessionUser.name ? sessionUser.name.split(' ')[0] : sessionUser.login}</span>
               <LogOut size={16} />
             </button>
           ) : (
-            <div className="authBtnGroup">
-              <a
-                className="outlineBtn authBtn"
-                href="/auth/github"
-                title="Sign in with GitHub"
-              >
-                <Github size={16} />
-                <span>GitHub</span>
-              </a>
-              <a
-                className="outlineBtn authBtn googleAuthBtn"
-                href="/auth/google"
-                title="Sign in with Google"
-              >
-                <GoogleIcon />
-                <span>Google</span>
-              </a>
-            </div>
+            route.mode === 'landing' ? (
+              <div className="authBtnGroup">
+                <button
+                  type="button"
+                  className="navGetStartedBtn"
+                  onClick={() => pushRoute('/register')}
+                  id="topbar-get-started-btn"
+                >
+                  Get Started
+                </button>
+              </div>
+            ) : route.mode === 'register' ? (
+              <div className="authBtnGroup">
+                <button
+                  type="button"
+                  className="outlineBtn authBtn"
+                  onClick={() => pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)}
+                >
+                  <Sparkles size={14} />
+                  <span>Try Free</span>
+                </button>
+                <a
+                  className="outlineBtn authBtn"
+                  href="/auth/github"
+                  title="Sign in with GitHub"
+                >
+                  <Github size={16} />
+                  <span>Sign in</span>
+                </a>
+              </div>
+            ) : (
+              <div className="authBtnGroup">
+                <a
+                  className="outlineBtn authBtn"
+                  href="/auth/github"
+                  title="Sign in with GitHub"
+                >
+                  <Github size={16} />
+                  <span>GitHub</span>
+                </a>
+                <a
+                  className="outlineBtn authBtn googleAuthBtn"
+                  href="/auth/google"
+                  title="Sign in with Google"
+                >
+                  <GoogleIcon />
+                  <span>Google</span>
+                </a>
+              </div>
+            )
           )}
           <button
             type="button"
@@ -406,7 +567,65 @@ export default function App() {
       </header>
       {menu && <div className="navBackdrop mobileOnly" onClick={() => setMenu(false)} aria-hidden="true" />}
 
-      {route.mode === 'compare' ? (
+      {route.mode === 'landing' ? (
+        <main>
+          <LandingPage
+            onGetStarted={() => {
+              pushRoute('/register')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onTryFree={() => {
+              pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onSearch={async (name) => {
+              if (!sessionUser) {
+                try {
+                  const usage = await consumeGuestSearch(name)
+                  if (!usage.allowed) {
+                    setLoginPrompt(true)
+                    return
+                  }
+                } catch (caught) {
+                  const message = caught instanceof Error ? caught.message.toLowerCase() : ''
+                  if (message.includes('3 free searches') || message.includes('sign in with github')) {
+                    setLoginPrompt(true)
+                    return
+                  }
+                  console.error('Search access check failed:', caught)
+                  return
+                }
+              }
+              setQuery(name)
+              recent.add(name)
+              pushRoute(`/u/${encodeURIComponent(name)}`)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onOpenSignIn={() => {
+              window.location.href = '/auth/github'
+            }}
+            sessionUser={sessionUser}
+          />
+        </main>
+      ) : route.mode === 'register' ? (
+        <main>
+          <RegisterPage
+            onBackToHome={() => {
+              pushRoute('/')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onTryFree={() => {
+              pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onOpenPrivacy={() => setPrivacyOpen(true)}
+            onExistingSignIn={() => {
+              window.location.href = '/auth/github'
+            }}
+            sessionUser={sessionUser}
+          />
+        </main>
+      ) : route.mode === 'compare' ? (
         <main><CompareView initialLeft={route.left} initialRight={route.right} /></main>
       ) : (
         <DashboardView
@@ -454,13 +673,26 @@ export default function App() {
               <a className="primaryBtn loginPromptButton" href="/auth/github"><Github size={16} /> Sign in with GitHub</a>
               <a className="outlineBtn loginPromptButton googleAuthBtn" href="/auth/google"><GoogleIcon /> Sign in with Google</a>
             </div>
+            <div className="loginPromptSecondaryActions">
+              <button
+                type="button"
+                className="outlineBtn loginPromptHomeBtn"
+                onClick={() => {
+                  setLoginPrompt(false)
+                  pushRoute('/')
+                }}
+              >
+                Return to Landing Page
+              </button>
+              <button className="ghostBtn loginPromptLater" onClick={() => setLoginPrompt(false)}>Maybe later</button>
+            </div>
             <button type="button" className="privacyLinkBtn" onClick={() => setPrivacyOpen(true)}>
               <ShieldCheck size={13} /> View OAuth scopes & privacy details
             </button>
-            <button className="ghostBtn loginPromptLater" onClick={() => setLoginPrompt(false)}>Maybe later</button>
           </div>
         </div>
       )}
+
 
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />

@@ -31,7 +31,10 @@ function isPlaceholderSecret(secret) {
 }
 
 function resolveSessionSecret(env = process.env) {
-  const isProduction = env.NODE_ENV === 'production'
+  const isProduction =
+    env.NODE_ENV === 'production' ||
+    env.VERCEL_ENV === 'production' ||
+    (env.VERCEL === '1' && env.NODE_ENV !== 'test' && env.NODE_ENV !== 'development')
   const rawSecret = env.SESSION_SECRET || ''
   if (isProduction) {
     if (isPlaceholderSecret(rawSecret)) {
@@ -44,7 +47,10 @@ function resolveSessionSecret(env = process.env) {
   return rawSecret.trim() || fallbackSessionSecret
 }
 
-const isProd = process.env.NODE_ENV === 'production'
+const isProd =
+  process.env.NODE_ENV === 'production' ||
+  process.env.VERCEL_ENV === 'production' ||
+  (process.env.VERCEL === '1' && process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development')
 const sessionSecret = resolveSessionSecret(process.env)
 
 const sessionOptions = {
@@ -62,7 +68,7 @@ const sessionOptions = {
 const app = express()
 // Render, Railway, Fly etc. terminate TLS in a proxy. Without this, secure cookies are dropped
 // and the rate limiter sees every visitor as the same IP.
-if (isProd || process.env.TRUST_PROXY) app.set('trust proxy', Number(process.env.TRUST_PROXY || 1))
+app.set('trust proxy', Number(process.env.TRUST_PROXY || 1))
 const PORT = Number(process.env.PORT || 5000)
 const TTL = Math.max(60, Number(process.env.CACHE_TTL_SECONDS || 600)) * 1000
 const defaultToken = process.env.GITHUB_TOKEN?.trim() || ''
@@ -1000,7 +1006,7 @@ app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
 
 /** Shared helper: safely append a Set-Cookie header. */
 function appendSetCookie(res, cookieStr) {
-  const existing = res.getHeader('Set-Cookie')
+  const existing = res.getHeader('set-cookie') || res.getHeader('Set-Cookie')
   if (!existing) {
     res.setHeader('Set-Cookie', cookieStr)
   } else if (Array.isArray(existing)) {
@@ -1023,11 +1029,86 @@ function setOAuthStateCookie(res, signedState) {
   appendSetCookie(res, cookieParts.join('; '))
 }
 
-/** Shared helper: read + clear + verify the oauth_state cookie. Returns {ok, state} or {ok:false}. */
-function consumeOAuthState(req, res, returnedState) {
-  const cookieHeader = req.headers.cookie || ''
+/** Shared helper: safely resolve OAuth callback redirect URI between local and production. */
+function resolveOAuthCallbackUri(req, provider) {
+  const envUrl = provider === 'github' ? process.env.GITHUB_CALLBACK_URL : process.env.GOOGLE_CALLBACK_URL
+
+  if (isProd) {
+    return envUrl || `http://127.0.0.1:${PORT}/auth/${provider}/callback`
+  }
+
+  // In local development:
+  // If explicitly configured with a local URL (e.g. 127.0.0.1 or localhost), honor it
+  if (envUrl && (envUrl.includes('127.0.0.1') || envUrl.includes('localhost'))) {
+    return envUrl
+  }
+
+  // If pointing to production while running locally, warn and use local host
+  if (envUrl && (envUrl.includes('vercel.app') || envUrl.startsWith('https://'))) {
+    try {
+      console.warn(`[OAuth Warning] ${provider.toUpperCase()}_CALLBACK_URL is set to production (${new URL(envUrl).host}) while running locally. Using local callback URI to keep OAuth flow on local machine.`)
+    } catch {
+      // ignore URL parsing error
+    }
+  }
+
+  // Derive local host from Vite proxy or direct Express request
+  let host = req?.headers?.['x-forwarded-host'] || req?.headers?.host || `127.0.0.1:${PORT}`
+  // If client origin is on 127.0.0.1, align callback host to 127.0.0.1 to avoid cross-host cookie drops
+  if (clientOrigins[0]?.includes('127.0.0.1') && host.includes('localhost')) {
+    host = host.replace('localhost', '127.0.0.1')
+  }
+  const proto = req?.headers?.['x-forwarded-proto'] || (req?.protocol === 'https' ? 'https' : 'http')
+  return `${proto}://${host}/auth/${provider}/callback`
+}
+
+/** Shared helper: resolve the trusted frontend origin for redirects. */
+function resolveFrontendOrigin(req) {
+  const reqOrigin = req?.get?.('origin') || (req?.get?.('referer') ? new URL(req.get('referer')).origin : null)
+  if (reqOrigin && clientOrigins.includes(reqOrigin)) {
+    return reqOrigin.replace(/\/+$/, '')
+  }
+  return (clientOrigins[0] || 'http://127.0.0.1:5173').replace(/\/+$/, '')
+}
+
+/** Shared helper: resolve the destination URL on the trusted frontend origin. */
+function resolvePostLoginRedirect(req, fallbackPath = '/dashboard') {
+  const origin = resolveFrontendOrigin(req)
+  const path = fallbackPath.startsWith('/') ? fallbackPath : `/${fallbackPath}`
+  return `${origin}${path}`
+}
+
+/** Shared helper: persist signed OAuth state to cookie and session. */
+async function persistOAuthState(req, res, state, redirectUri = null, frontendOrigin = null) {
+  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
+  const signedState = `${state}.${signature}`
+  if (req.session) {
+    req.session.oauthState = signedState
+    if (redirectUri) {
+      req.session.oauthRedirectUri = redirectUri
+    }
+    if (frontendOrigin) {
+      req.session.oauthFrontendOrigin = frontendOrigin
+    }
+    try {
+      await req.session.save()
+    } catch (err) {
+      console.warn('Failed to save oauthState into session:', err)
+    }
+  }
+  setOAuthStateCookie(res, signedState)
+  return signedState
+}
+
+/** Shared helper: read + clear + verify the oauth_state from cookie and/or session. Returns {ok, state, frontendOrigin} or {ok:false}. */
+async function consumeOAuthState(req, res, returnedState) {
+  const cookieHeader = req.headers?.cookie || ''
   const match = cookieHeader.match(/(?:^|;\s*)oauth_state=([^;]+)/)
-  const signedState = match ? decodeURIComponent(match[1]) : ''
+  const cookieSignedState = match ? decodeURIComponent(match[1]) : ''
+  const sessionSignedState = req.session?.oauthState || ''
+
+  console.log(`[OAuth Diagnostic] consumeOAuthState: hasCookieState=${!!cookieSignedState}, hasSessionState=${!!sessionSignedState}, hasReturnedState=${!!returnedState}`)
+
   // Clear the cookie immediately (valid or not)
   const clearParts = [
     'oauth_state=',
@@ -1039,35 +1120,65 @@ function consumeOAuthState(req, res, returnedState) {
     isProd ? 'Secure' : ''
   ].filter(Boolean)
   appendSetCookie(res, clearParts.join('; '))
-  if (!signedState || !returnedState || typeof returnedState !== 'string') return { ok: false }
-  const dotIndex = signedState.indexOf('.')
-  if (dotIndex === -1) return { ok: false }
-  const originalState = signedState.substring(0, dotIndex)
-  const signature = signedState.substring(dotIndex + 1)
-  const expectedSig = crypto.createHmac('sha256', sessionSecret).update(originalState).digest('hex')
 
-  if (returnedState !== originalState) return { ok: false }
-
-  const sigBuf = Buffer.from(signature, 'hex')
-  const expBuf = Buffer.from(expectedSig, 'hex')
-  if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-    return { ok: false }
+  // Clear session state immediately, preserving saved frontendOrigin for redirect
+  let savedFrontendOrigin = null
+  if (req.session?.oauthState || req.session?.oauthRedirectUri || req.session?.oauthFrontendOrigin) {
+    savedFrontendOrigin = req.session.oauthFrontendOrigin || null
+    delete req.session.oauthState
+    delete req.session.oauthRedirectUri
+    delete req.session.oauthFrontendOrigin
+    try {
+      await req.session.save()
+    } catch (err) {
+      console.warn('Failed to clear oauthState from session:', err)
+    }
   }
 
-  return { ok: true, state: originalState }
+  if (!returnedState || typeof returnedState !== 'string') return { ok: false, frontendOrigin: savedFrontendOrigin }
+
+  const candidates = [cookieSignedState, sessionSignedState].filter(Boolean)
+  if (candidates.length === 0) return { ok: false, frontendOrigin: savedFrontendOrigin }
+
+  for (const candidate of candidates) {
+    const dotIndex = candidate.indexOf('.')
+    if (dotIndex === -1) {
+      if (candidate === returnedState) {
+        return { ok: true, state: returnedState, frontendOrigin: savedFrontendOrigin }
+      }
+      continue
+    }
+    const originalState = candidate.substring(0, dotIndex)
+    const signature = candidate.substring(dotIndex + 1)
+    const expectedSig = crypto.createHmac('sha256', sessionSecret).update(originalState).digest('hex')
+
+    if (returnedState !== originalState) continue
+
+    const sigBuf = Buffer.from(signature, 'hex')
+    const expBuf = Buffer.from(expectedSig, 'hex')
+    if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return { ok: true, state: originalState, frontendOrigin: savedFrontendOrigin }
+    }
+  }
+
+  return { ok: false, frontendOrigin: savedFrontendOrigin }
 }
 
-app.get('/auth/github', (req, res) => {
+app.get('/auth/github', async (req, res) => {
   const clientId = process.env.GITHUB_CLIENT_ID
   if (!clientId) return res.status(501).send('GitHub OAuth is not configured.')
   const state = crypto.randomBytes(24).toString('hex')
-  // Create a signed state token to prevent tampering
-  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
-  const signedState = `${state}.${signature}`
-  setOAuthStateCookie(res, signedState)
+  const redirectUri = resolveOAuthCallbackUri(req, 'github')
+  const frontendOrigin = resolveFrontendOrigin(req)
+  await persistOAuthState(req, res, state, redirectUri, frontendOrigin)
+  try {
+    console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
+  } catch {
+    console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+  }
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: process.env.GITHUB_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/github/callback`,
+    redirect_uri: redirectUri,
     scope: 'read:user user:email',
     state
   })
@@ -1076,10 +1187,12 @@ app.get('/auth/github', (req, res) => {
 
 app.get('/auth/github/callback', async (req, res) => {
   const { code, state } = req.query
-  const verification = consumeOAuthState(req, res, state)
+  const verification = await consumeOAuthState(req, res, state)
+  console.log(`[OAuth Diagnostic] /auth/github/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
   if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
 
   try {
+    const redirectUri = req.session?.oauthRedirectUri || resolveOAuthCallbackUri(req, 'github')
     const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
@@ -1087,7 +1200,7 @@ app.get('/auth/github/callback', async (req, res) => {
         client_id: process.env.GITHUB_CLIENT_ID,
         client_secret: process.env.GITHUB_CLIENT_SECRET,
         code,
-        redirect_uri: process.env.GITHUB_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/github/callback`
+        redirect_uri: redirectUri
       })
     })
     const tokenBody = await tokenResponse.json()
@@ -1098,7 +1211,8 @@ app.get('/auth/github/callback', async (req, res) => {
     req.session.githubAccessToken = tokenBody.access_token
     req.session.githubUser = { login: user.login, name: user.name, avatar_url: user.avatar_url }
     await req.session.save()
-    res.redirect(clientOrigins[0])
+    const targetOrigin = verification.frontendOrigin || resolveFrontendOrigin(req)
+    res.redirect(`${targetOrigin}/dashboard`)
   } catch (error) {
     console.error('GitHub OAuth callback error:', error)
     res.status(502).send('GitHub sign-in failed.')
@@ -1119,14 +1233,18 @@ function getGoogleJWKS() {
   return googleJWKS
 }
 
-app.get('/auth/google', (req, res) => {
+app.get('/auth/google', async (req, res) => {
   const clientId = process.env.GOOGLE_CLIENT_ID
   if (!clientId) return res.status(501).send('Google OAuth is not configured.')
   const state = crypto.randomBytes(24).toString('hex')
-  const signature = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
-  const signedState = `${state}.${signature}`
-  setOAuthStateCookie(res, signedState)
-  const redirectUri = process.env.GOOGLE_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/google/callback`
+  const redirectUri = resolveOAuthCallbackUri(req, 'google')
+  const frontendOrigin = resolveFrontendOrigin(req)
+  await persistOAuthState(req, res, state, redirectUri, frontendOrigin)
+  try {
+    console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
+  } catch {
+    console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+  }
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -1141,14 +1259,16 @@ app.get('/auth/google', (req, res) => {
 
 app.get('/auth/google/callback', async (req, res) => {
   const { code, state, error: oauthError } = req.query
+  const frontendOrigin = req.session?.oauthFrontendOrigin || resolveFrontendOrigin(req)
 
   // Google may return an error (e.g. user denied consent)
   if (oauthError) {
     console.warn('Google OAuth error from provider:', oauthError)
-    return res.redirect(`${clientOrigins[0]}?auth_error=google_denied`)
+    return res.redirect(`${frontendOrigin}/register?auth_error=google_denied`)
   }
 
-  const verification = consumeOAuthState(req, res, state)
+  const verification = await consumeOAuthState(req, res, state)
+  console.log(`[OAuth Diagnostic] /auth/google/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
   if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
 
   if (!code || typeof code !== 'string') {
@@ -1160,7 +1280,7 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 
   try {
-    const redirectUri = process.env.GOOGLE_CALLBACK_URL || `http://127.0.0.1:${PORT}/auth/google/callback`
+    const redirectUri = req.session?.oauthRedirectUri || resolveOAuthCallbackUri(req, 'google')
 
     // Exchange authorisation code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -1194,7 +1314,7 @@ app.get('/auth/google/callback', async (req, res) => {
       id: payload.sub,
       name: typeof payload.name === 'string' ? payload.name : (payload.email ? String(payload.email).split('@')[0] : 'Google User'),
       email: typeof payload.email === 'string' ? payload.email : null,
-      avatar_url: typeof payload.picture === 'string' ? payload.picture : null,
+      avatar_url: typeof payload.picture === 'string' && payload.picture ? payload.picture : '/assets/arsenic-mark.svg',
       // Expose a stable display handle: prefer email prefix, fallback to sub
       login: typeof payload.email === 'string'
         ? payload.email
@@ -1202,7 +1322,8 @@ app.get('/auth/google/callback', async (req, res) => {
     }
     // Do not overwrite an existing GitHub session unnecessarily
     await req.session.save()
-    res.redirect(clientOrigins[0])
+    const targetOrigin = verification.frontendOrigin || frontendOrigin
+    res.redirect(`${targetOrigin}/dashboard`)
   } catch (error) {
     console.error('Google OAuth callback error:', error)
     res.status(502).send('Google sign-in failed.')
@@ -1290,7 +1411,13 @@ export {
   GITHUB_USERNAME_REGEX,
   fallbackSessionSecret,
   isPlaceholderSecret,
-  resolveSessionSecret
+  resolveSessionSecret,
+  setOAuthStateCookie,
+  consumeOAuthState,
+  persistOAuthState,
+  resolveOAuthCallbackUri,
+  resolveFrontendOrigin,
+  resolvePostLoginRedirect
 }
 export default app
 

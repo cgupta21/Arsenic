@@ -6,7 +6,7 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
 
 <p align="center">
   <a href="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml">
-    <img src="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml/badge.svg" alt="CI Status">
+    <img src="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status">
   </a>
   <a href="https://arsenic-rho.vercel.app/">
     <img src="https://img.shields.io/badge/Live%20Demo-arsenic--rho.vercel.app-C96A45?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo">
@@ -26,6 +26,20 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
 
 ---
 
+## Dashboard Preview
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-overview.png" alt="Arsenic Developer Intelligence Dashboard Overview" width="100%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/developer-comparison.png" alt="Side-by-Side Developer Comparison" width="49%">
+  &nbsp;
+  <img src="docs/screenshots/share-card.png" alt="Exportable Arsenic Developer Share Card" width="49%">
+</p>
+
+---
+
 ## Why I Built This
 
 Standard GitHub profile pages do a great job highlighting pinned repositories and basic contribution green-squares. However, they leave much of an engineer's day-to-day story fragmented across disparate commits, pull requests, issue threads, and release histories. Furthermore, standard contribution graphs treat a one-line typo fix identically to a complex multi-file pull request.
@@ -38,30 +52,6 @@ I built Arsenic to explore GitHub developer activity through a unified, intellig
 4. **Produce Clean, Shareable Portfolio Artifacts:** Generate exportable developer summary cards and crawler-optimized profile links suitable for resumes, portfolios, and technical interviews.
 
 Above all, I wanted the dashboard to remain fast, privacy-focused, and deterministic—delivering valuable insights without calling expensive third-party AI APIs or requesting intrusive OAuth write permissions.
-
----
-
-## Showcase
-
-### Main Dashboard Overview
-Comprehensive developer analytics displaying core profile metadata, annual contribution volume, current contribution streak, star totals, and transparent Arsenic scoring.
-
-![Arsenic Dashboard Overview](docs/screenshots/dashboard-overview.png)
-
-### Contribution Signal & Code Distribution
-Interactive contribution heatmap, 8-week activity trend curve, commit timing patterns (by day and hour), and detected programming language mix.
-
-![Contribution Heatmap and Activity Signals](docs/screenshots/contribution-heatmap.png)
-
-### Side-by-Side Developer Comparison
-Real-time comparison contrasting two developers across repository velocity, contribution volume, consistency, collaboration, and impact scores.
-
-![Side-by-Side Developer Comparison](docs/screenshots/developer-comparison.png)
-
-### Exportable Profile Share Card
-Clean, branded summary card designed for portfolio integration, technical interviews, and PDF/PNG exports.
-
-![Arsenic Share Card](docs/screenshots/share-card.png)
 
 ---
 
@@ -124,21 +114,25 @@ Clean, branded summary card designed for portfolio integration, technical interv
 - **Challenge:** GitHub's unauthenticated REST API limits clients to only 60 requests per hour per IP address, while the GraphQL API requires authentication but provides rich one-year contribution calendars. When users browse unauthenticated, relying strictly on GraphQL would cause immediate failures.
 - **Implementation & Learning:** Implemented a resilient hybrid data-fetching pipeline in `server/index.js`. When a server-side `GITHUB_TOKEN` or user OAuth session is present, Arsenic queries the GraphQL API for complete one-year contribution calendars and byte-level language statistics. When unauthenticated, the engine gracefully falls back to the public events feed (`/users/:username/events/public`), estimating recent activity signals (~90 days). I paired this with in-memory RAM caching (10-minute TTL) and in-flight request deduplication to prevent redundant calls and protect rate-limit quotas.
 
-### 2. Designing Intuitive Developer Visualizations & Deterministic Scoring
-- **Challenge:** Presenting multidimensional developer telemetry (streaks, commit timing distributions, language volumes, and repository health) without overwhelming the user or producing misleading scores on sparse accounts.
-- **Implementation & Learning:** Built custom SVG and Recharts visualizations that gracefully handle sparse data without layout shifting. Instead of generating arbitrary or subjective "AI scores", I designed an open, deterministic mathematical formula in `shared/score.js` that weights Consistency, Collaboration, and Impact out of 100. I learned how to normalize metrics using logarithmic dampening so that high-activity outliers do not break the visual scale for typical developers.
-
-### 3. Implementing Unauthenticated Guest Quotas with Secure Stateless Auth
+### 2. Encrypted-Cookie Sessions & Cookie-Based Guest Quotas
 - **Challenge:** Preventing automated scraping and API abuse on the public web app while maintaining a frictionless onboarding experience for visitors who do not want to sign in immediately.
 - **Implementation & Learning:** Implemented a stateless guest search allowance in `server/index.js` backed by encrypted client cookies via `iron-session`. Guests receive 3 distinct successful profile analyses before being prompted to sign in. Crucially, I engineered the middleware so that failed queries (e.g., 404 user not found or 400 invalid usernames) and repeated visits to already-analyzed profiles do not consume a guest's search credit, and the showcase account (`@cgupta21`) is exempt. For authenticated users, `iron-session` encrypts the GitHub access token inside an encrypted cookie, avoiding database connection latency, eliminating the need for a centralized session store (such as Redis) across serverless instances, and preventing access token leakage.
 
-### 4. Responsive Mobile Navigation & Accessibility Engineering
-- **Challenge:** On real mobile devices, navigation controls were overlapping, hamburger click handlers were failing to toggle menus properly, background content scrolled while menus were open, and touch targets were difficult to tap accurately.
-- **Implementation & Learning:** Refactored `client/src/App.tsx` and `client/src/styles.css` to use semantic `<nav>` elements with complete ARIA attributes (`aria-expanded`, `aria-controls`, `aria-label`). Added body scroll locking (`overflow: hidden`) during menu expansion, escape-key dismiss listeners, and backdrop click handlers. Styled all interactive headers, close buttons, and form inputs to satisfy the minimum 44 × 44 px touch target standard and validated responsive layouts across widths from 320 px to 1920 px without horizontal overflow.
+### 3. Hybrid Vercel Serverless Architecture & Standalone Express Execution
+- **Challenge:** Single Page Applications deployed on serverless hosting often face cold starts, distinct routing rules between static assets and dynamic APIs, and volatile memory Lifecycles.
+- **Implementation & Learning:** Structured the codebase so that thin serverless functions in `api/` act as adapters delegating incoming HTTP requests directly to the Express application exported from `server/index.js`. This allows the exact same business logic to run in Vercel's serverless environment or inside a traditional standalone Node/Express container (`npm start`). I also designed the in-memory RAM caches (`cache`, `summaryCache`) to acknowledge that serverless memory is container-scoped rather than globally shared across instances.
 
-### 5. Hybrid Vercel Serverless Architecture & Social Crawler Edge Prerendering
-- **Challenge:** Single Page Applications built with Vite render client-side HTML, meaning social media crawlers (Twitterbot, Discordbot, LinkedIn, Facebook) scraping shareable profile links (`/u/:username`) receive a generic `index.html` file lacking profile-specific titles, bios, or preview images.
-- **Implementation & Learning:** Configured a specialized edge rewrite rule in `vercel.json` that uses regex header inspection to identify crawler User-Agents. When a social bot requests `/u/:username`, Vercel proxies the request directly to a lightweight serverless handler (`api/meta/[username].js`) that dynamically serves an HTML document containing profile-specific Open Graph and Twitter Card tags. Human visitors continue directly to the static client bundle cached on the global CDN.
+### 4. Social Crawler Edge Prerendering for Dynamic Profile Links
+- **Challenge:** Client-side SPAs render empty HTML shells until JavaScript runs in the browser. Social media bots (Twitterbot, Discordbot, LinkedIn, Facebook) scraping shareable profile links (`/u/:username`) do not execute client JS and therefore receive a blank preview without user-specific titles, bios, or cards.
+- **Implementation & Learning:** Configured an edge rewrite in `vercel.json` that inspects User-Agent headers for social crawlers. When a bot requests `/u/:username`, Vercel proxies the request directly to a dedicated serverless handler (`api/meta/[username].js`) that dynamically serves an HTML document containing profile-specific Open Graph and Twitter Card tags. Human visitors continue directly to the static client bundle cached on the global CDN.
+
+### 5. Mobile Responsiveness & Canvas Export Reliability (PNG/PDF)
+- **Challenge:** On mobile browsers, navigation elements overlapped, hamburger click handlers failed to open menus, and export actions failed or crashed tabs due to canvas tainting from cross-origin avatars and memory limits on high-DPI screens.
+- **Implementation & Learning:** Refactored navigation to use semantic `<nav>` elements with ARIA attributes (`aria-expanded`, `aria-controls`), body scroll locking (`overflow: hidden`), and minimum 44 × 44 px touch targets. For card exports, added `crossOrigin="anonymous"` to user avatars to prevent CORS canvas tainting, awaited `document.fonts.ready` before rasterization, passed the canvas directly to `jsPDF` to avoid memory-heavy base64 string duplication, and integrated the native Web Share API (`navigator.share`) for smooth saving on iOS Safari and Android Chrome.
+
+### 6. Security Hardening, Strict Input Validation & Comprehensive Testing
+- **Challenge:** Protecting the application against parameter injection, cross-origin security violations, and iframe embedding without breaking GitHub user avatars or OAuth redirects.
+- **Implementation & Learning:** Integrated Helmet middleware with a tailored Content Security Policy (allowing `https://avatars.githubusercontent.com` and blob/data URIs), enforced HSTS in production, and locked down framing policies. Standardized strict GitHub username validation via regex (`/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`) returning HTTP 400 across all endpoints before calling upstream GitHub APIs. Backed the entire application with an automated test suite of 109 tests across 9 suites in Vitest.
 
 ---
 

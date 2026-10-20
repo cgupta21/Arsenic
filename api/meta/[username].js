@@ -1,10 +1,14 @@
+const GITHUB_USERNAME_REGEX = /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/
+
 export default function handler(req, res) {
   const rawUser = req.query?.username || (req.url ? req.url.split('?')[0].split('/').pop() : '') || ''
   const username = decodeURIComponent(String(rawUser)).replace(/^@/, '').trim()
 
-  const GITHUB_USER_RE = /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/
-  if (username && !GITHUB_USER_RE.test(username)) {
+  if (!username || !GITHUB_USERNAME_REGEX.test(username)) {
     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
     return res.status(400).send('Invalid username')
   }
 
@@ -61,5 +65,8 @@ export default function handler(req, res) {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   return res.status(200).send(html)
 }

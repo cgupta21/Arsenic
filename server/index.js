@@ -9,6 +9,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
+import { isValidGitHubUsername, GITHUB_USERNAME_REGEX } from '../shared/validation.js'
 import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -58,7 +59,28 @@ const corsOptions = {
   credentials: true
 }
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://avatars.githubusercontent.com'],
+        fontSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'self'"],
+        formAction: ["'self'", 'https://github.com'],
+        objectSrc: ["'none'"],
+        baseUri: ["'self'"],
+        upgradeInsecureRequests: isProd ? [] : null
+      }
+    },
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    hsts: isProd ? { maxAge: 31536000, includeSubDomains: true } : false
+  })
+)
 app.use(cors(corsOptions))
 app.use(express.json({ limit: '1mb' }))
 app.use(async (req, res, next) => {
@@ -567,7 +589,7 @@ function normalizeRepo(repo) {
 
 async function buildDashboard(username, authToken, includePrivate = false) {
   const normalized = username.replace(/^@/, '').trim()
-  if (!/^[a-zA-Z0-9-]+$/.test(normalized)) {
+  if (!isValidGitHubUsername(normalized)) {
     const error = new Error('Invalid GitHub username.')
     error.status = 400
     throw error
@@ -734,6 +756,9 @@ app.post('/api/search/consume', async (req, res) => {
 
 app.get('/api/dashboard/:username', async (req, res) => {
   const username = req.params.username.replace(/^@/, '').trim()
+  if (!isValidGitHubUsername(username)) {
+    return res.status(400).json({ error: 'Invalid GitHub username.' })
+  }
   const lowerUser = username.toLowerCase()
   const privateScope = userCanSeePrivate(req, username)
   const token = sessionToken(req)
@@ -782,6 +807,9 @@ app.get('/api/dashboard/:username', async (req, res) => {
       throw error
     }
   } catch (error) {
+    if (error.status === 400) {
+      return res.status(400).json({ error: error.message || 'Invalid GitHub username.' })
+    }
     if (error.status === 404 || error.message?.includes('was not found') || error.message?.includes('Could not resolve to a User')) {
       return res.status(404).json({ error: `GitHub user "${username}" was not found.` })
     }
@@ -808,6 +836,13 @@ app.get('/api/dashboard/:username', async (req, res) => {
 app.get('/api/meta/:username', (req, res) => {
   const rawUser = req.params.username || ''
   const username = decodeURIComponent(String(rawUser)).replace(/^@/, '').trim()
+  if (!isValidGitHubUsername(username)) {
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return res.status(400).send('Invalid username')
+  }
   const displayUser = username || 'Developer'
   const title = `Arsenic — @${displayUser}`
   const description = `GitHub developer intelligence, contribution patterns and repository health for @${displayUser} on Arsenic.`
@@ -857,12 +892,18 @@ app.get('/api/meta/:username', (req, res) => {
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   return res.status(200).send(html)
 })
 
 app.get('/api/compare/:left/:right', async (req, res) => {
   const left = req.params.left.replace(/^@/, '').trim()
   const right = req.params.right.replace(/^@/, '').trim()
+  if (!isValidGitHubUsername(left) || !isValidGitHubUsername(right)) {
+    return res.status(400).json({ error: 'Invalid GitHub username.' })
+  }
   try {
     const [leftData, rightData] = await Promise.all([
       buildDashboard(left, sessionToken(req), userCanSeePrivate(req, left)),
@@ -870,6 +911,7 @@ app.get('/api/compare/:left/:right', async (req, res) => {
     ])
     res.json({ left: leftData, right: rightData })
   } catch (error) {
+    if (error.status === 400) return res.status(400).json({ error: error.message || 'Invalid GitHub username.' })
     if (error.status === 401) {
       // Invalidate stale token and inform client
       req.session.githubAccessToken = null
@@ -884,6 +926,9 @@ app.get('/api/compare/:left/:right', async (req, res) => {
 
 app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
   const username = req.params.username.replace(/^@/, '').trim()
+  if (!isValidGitHubUsername(username)) {
+    return res.status(400).json({ error: 'Invalid GitHub username.' })
+  }
   const summaryKey = cacheKey(username, userCanSeePrivate(req, username))
   const cachedSummary = summaryCache.get(summaryKey)
   if (cachedSummary && cachedSummary.expires > Date.now()) {
@@ -1064,7 +1109,7 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: 'Unexpected server error.' })
 })
 
-export { calculateStreaks, flattenCalendar }
+export { calculateStreaks, flattenCalendar, isValidGitHubUsername, GITHUB_USERNAME_REGEX }
 export default app
 
 if (process.env.VERCEL !== '1' && process.env.NODE_ENV !== 'test') {

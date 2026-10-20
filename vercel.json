@@ -3,6 +3,33 @@
   "buildCommand": "npm run build",
   "outputDirectory": "client/dist",
   "installCommand": "npm ci --include=dev",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self'; form-action 'self' https://github.com; object-src 'none'; base-uri 'self'; upgrade-insecure-requests"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/auth/github/callback",

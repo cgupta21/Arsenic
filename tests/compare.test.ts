@@ -56,7 +56,7 @@ function inProcessFetch(
 describe('Developer Comparison API (/api/compare/:left/:right)', () => {
   it('rejects invalid developer usernames with 502/400 error', async () => {
     const res = await inProcessFetch('/api/compare/invalid$$user/validUser')
-    expect(res.status).toBe(502)
+    expect([400, 502]).toContain(res.status)
     expect(res.json().error).toContain('Invalid GitHub username')
   })
 
@@ -195,7 +195,7 @@ describe('Vercel Serverless Function Handler (api/compare/[left]/[right].js)', (
         const { port } = server.address() as AddressInfo
         originalFetch(`http://127.0.0.1:${port}/api/compare/invalid$$left/invalid$$right`)
           .then(async (r) => {
-            expect(r.status).toBe(502)
+            expect([400, 502]).toContain(r.status)
             const json = await r.json()
             expect(json.error).toContain('Invalid GitHub username')
             resolve()

@@ -15,7 +15,7 @@ export function normalizeGithubInput(input: string): {
 
   // Fast path: plain username (no slashes, no protocol, no dot)
   if (!clean.includes('/') && !clean.includes('://') && !clean.includes('.')) {
-    return { username: clean };
+    return validateCandidate(clean);
   }
 
   // Ensure we have a URL – prepend protocol if missing for URL constructor
@@ -42,5 +42,25 @@ export function normalizeGithubInput(input: string): {
     return { username: null, error: 'Please paste a GitHub profile URL, not a repository URL.' };
   }
 
-  return { username: parts[0] };
+  return validateCandidate(parts[0]);
+}
+
+function validateCandidate(candidate: string): { username: string | null; error?: string } {
+  if (candidate.length > 39) {
+    return { username: null, error: 'GitHub usernames cannot exceed 39 characters.' };
+  }
+  if (candidate.startsWith('-')) {
+    return { username: null, error: 'GitHub usernames cannot start with a hyphen.' };
+  }
+  if (candidate.endsWith('-')) {
+    return { username: null, error: 'GitHub usernames cannot end with a hyphen.' };
+  }
+  if (candidate.includes('--')) {
+    return { username: null, error: 'GitHub usernames cannot contain consecutive hyphens.' };
+  }
+  if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(candidate)) {
+    return { username: null, error: 'GitHub usernames may only contain alphanumeric characters and single hyphens.' };
+  }
+
+  return { username: candidate };
 }

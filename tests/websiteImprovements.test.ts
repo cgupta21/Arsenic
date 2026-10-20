@@ -183,7 +183,7 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
       expect(serverCode).toContain('sessionOptions')
       // No database imports or connection strings in server
       expect(serverCode).not.toContain('mongoose')
-      expect(serverCode).not.toContain('pg')
+      expect(serverCode).not.toMatch(/['"]pg['"]/)
       expect(serverCode).not.toContain('prisma')
     })
 

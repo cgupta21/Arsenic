@@ -758,7 +758,7 @@ function DashboardContent({
         <div className="shareLayout">
           <div className="shareCard" ref={shareRef} id="share-card">
             <div className="shareBrand"><img src="/assets/arsenic-mark.svg" alt="" /><span>ARSENIC</span></div>
-            <div className="shareIdentity"><img src={user.avatar_url} alt="" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score}</strong></div>
+            <div className="shareIdentity"><img src={user.avatar_url} alt="" crossOrigin="anonymous" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score}</strong></div>
             <div className="shareGrid"><div><b>{compactNumber(data.contributions.total)}</b><span>contributions</span></div><div><b>{score.breakdown.consistency}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>

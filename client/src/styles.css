@@ -245,7 +245,11 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .shareIdentity h3 { margin: 0; font-size: 20px; color: #f1e9dc; }.shareIdentity span { color: #9d9b92; font-size: 11px; }.shareIdentity strong { font-size: 44px; color: var(--terracotta); line-height: 1; }
 .shareGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 28px; }.shareGrid > div { border: 1px solid #2a2925; background: #171614; border-radius: 10px; padding: 14px; }.shareGrid b { display:block; color:#f1e9dc; font-size: 20px; }.shareGrid span { color:#99968d; font-size:9px; margin-top:4px; display:block; }
 .shareFooter { margin-top: 24px; color:#74726c; font-size:9px; letter-spacing:.08em; }
+.exportContainer { display: flex; flex-direction: column; gap: 8px; }
 .exportActions { display: flex; flex-direction: column; gap: 8px; }
+.exportError { color: #e57373; font-size: 11px; margin-top: 2px; }
+.spinner { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .comparePage { padding-bottom: 70px; }
 .compareForm { display: grid; grid-template-columns: 1fr auto 1fr auto; align-items: end; gap: 12px; margin-bottom: 16px; }
 .compareForm label { display:block; font-size: 10px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .11em; }

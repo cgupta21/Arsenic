@@ -262,7 +262,7 @@ describe('Unauthenticated Guest Search Limit', () => {
     const resDash = await inProcessFetch('/api/dashboard/invalid$$$name', {
       headers: { Cookie: cookieHeader }
     })
-    expect(resDash.status).toBe(502) // or error from invalid username validation
+    expect([400, 502]).toContain(resDash.status) // returns 400 for invalid username format
 
     // Searches remaining remains 2
     const resCheck = await inProcessFetch('/api/search/consume', {

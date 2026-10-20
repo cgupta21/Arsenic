@@ -1,11 +1,11 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 // @ts-expect-error – server/index.js is plain JS without declaration files
-import app from '../server/index.js'
+import app, { resolveSessionSecret } from '../server/index.js'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { sealData } from 'iron-session'
 
-const SESSION_PASSWORD = process.env.SESSION_SECRET || 'arsenic-local-secret-change-me-32-chars!!'
+const SESSION_PASSWORD = resolveSessionSecret(process.env)
 
 function inProcessFetch(
   path: string,

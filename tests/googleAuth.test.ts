@@ -25,14 +25,14 @@
 
 import { describe, expect, it, vi, afterEach, beforeAll } from 'vitest'
 // @ts-expect-error – server/index.js is plain JS without declaration files
-import app from '../server/index.js'
+import app, { resolveSessionSecret } from '../server/index.js'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { sealData } from 'iron-session'
 import crypto from 'node:crypto'
 import { generateKeyPair, exportJWK, SignJWT } from 'jose'
 
-const SESSION_PASSWORD = process.env.SESSION_SECRET || 'arsenic-local-secret-change-me-32-chars!!'
+const SESSION_PASSWORD = resolveSessionSecret(process.env)
 
 let testKeyPair: Awaited<ReturnType<typeof generateKeyPair>>
 let testPublicKeyJwk: Record<string, unknown>
@@ -68,7 +68,12 @@ function inProcessFetch(
           const raw = await r.text()
           const hdrs: Record<string, string> = {}
           r.headers.forEach((value, key) => {
-            hdrs[key.toLowerCase()] = value
+            const k = key.toLowerCase()
+            if (k === 'set-cookie') {
+              hdrs[k] = hdrs[k] ? `${hdrs[k]}, ${value}` : value
+            } else {
+              hdrs[k] = value
+            }
           })
           resolve({
             status: r.status,
@@ -91,7 +96,7 @@ function inProcessFetch(
 // ---------------------------------------------------------------------------
 
 function createSignedStateCookie(state: string) {
-  const sessionSecret = process.env.SESSION_SECRET || 'arsenic-local-secret-change-me-32-chars!!'
+  const sessionSecret = resolveSessionSecret(process.env)
   const sig = crypto.createHmac('sha256', sessionSecret).update(state).digest('hex')
   return `oauth_state=${encodeURIComponent(`${state}.${sig}`)}`
 }
@@ -464,6 +469,7 @@ describe('GET /auth/google/callback — token exchange and JWT verification', ()
     })
 
     expect([301, 302, 303, 307, 308]).toContain(res.status)
+    expect(String(res.headers.location)).toContain('/dashboard')
     const setCookie = res.headers['set-cookie'] ?? ''
     expect(setCookie).toContain('session=')
 

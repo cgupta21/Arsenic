@@ -105,7 +105,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   width: auto;
   min-width: 44px;
 }
-.accountBtn img { width: 22px; height: 22px; border-radius: 50%; }
+.accountBtn img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
+.accountBtn .accountName { font-size: 13px; font-weight: 500; color: var(--text); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountBtn:disabled { opacity: .55; cursor: not-allowed; }
 .mobileOnly { display: none; }
 .navBackdrop { display: none; }

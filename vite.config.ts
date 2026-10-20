@@ -7,8 +7,16 @@ export default defineConfig({
   publicDir: '../public',
   server: {
     proxy: {
-      '/api': 'http://localhost:5000',
-      '/auth': 'http://localhost:5000',
+      '/api': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        xfwd: true,
+      },
+      '/auth': {
+        target: 'http://127.0.0.1:5000',
+        changeOrigin: true,
+        xfwd: true,
+      },
     },
   },
   build: {

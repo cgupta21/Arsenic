@@ -1034,7 +1034,7 @@ function resolveOAuthCallbackUri(req, provider) {
   const envUrl = provider === 'github' ? process.env.GITHUB_CALLBACK_URL : process.env.GOOGLE_CALLBACK_URL
 
   if (isProd) {
-    return envUrl || `http://127.0.0.1:${PORT}/auth/${provider}/callback`
+    return envUrl || `https://arsenic-rho.vercel.app/auth/${provider}/callback`
   }
 
   // In local development:

@@ -153,6 +153,11 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .loginPromptButtons { display: flex; flex-direction: column; gap: 9px; width: 100%; }
 .loginPromptButtons .loginPromptButton { width: 100%; }
 .stateCardAuthBtns { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; }
+.overviewSection { display: flex; flex-direction: column; gap: 14px; }
+.dashboardOverviewWrap { margin: 4px 0 10px; width: 100%; }
+.dashboardOverviewWrap .dashboardPreviewCard { box-shadow: 0 16px 45px var(--shadow); }
+.liveOverviewCard.overviewLoading { opacity: .7; transition: opacity .2s ease; }
+.previewFooterActions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .statsGrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 10px 0; }
 .stat { border: 1px solid var(--border); background: var(--card); padding: 17px; border-radius: 12px; min-width: 0; }
 .statIcon { color: var(--muted); margin-bottom: 14px; }

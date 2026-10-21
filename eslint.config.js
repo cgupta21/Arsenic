@@ -11,7 +11,8 @@ export default tseslint.config(
       globals: {
         process: 'readonly', console: 'readonly', fetch: 'readonly', URL: 'readonly',
         URLSearchParams: 'readonly', window: 'readonly', document: 'readonly',
-        localStorage: 'readonly', setTimeout: 'readonly',
+        localStorage: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly',
+        AbortController: 'readonly', Response: 'readonly',
       },
     },
     rules: {

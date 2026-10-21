@@ -195,56 +195,96 @@ function rateInfoFromResponse(response) {
   }
 }
 
+const GITHUB_REQUEST_TIMEOUT_MS = Number(process.env.GITHUB_FETCH_TIMEOUT_MS || 9000)
+
 async function githubRest(pathname, authToken = defaultToken, options = {}) {
-  const response = await fetch(`https://api.github.com${pathname}`, {
-    ...options,
-    headers: {
-      ...headersFor(authToken),
-      ...(options.headers || {})
-    }
-  })
-  const rate = rateInfoFromResponse(response)
-  const text = await response.text()
-  let body = null
-  try { body = text ? JSON.parse(text) : null } catch { body = { message: text } }
-
-  if (!response.ok) {
-    const error = new Error(body?.message || `GitHub API returned ${response.status}`)
-    error.status = response.status
-    error.rate = rate
-    error.body = body
-    throw error
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GITHUB_REQUEST_TIMEOUT_MS)
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort())
   }
+  try {
+    const response = await fetch(`https://api.github.com${pathname}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...headersFor(authToken),
+        ...(options.headers || {})
+      }
+    })
+    clearTimeout(timeoutId)
+    const rate = rateInfoFromResponse(response)
+    const text = await response.text()
+    let body = null
+    try { body = text ? JSON.parse(text) : null } catch { body = { message: text } }
 
-  return { body, rate }
+    if (!response.ok) {
+      const error = new Error(body?.message || `GitHub API returned ${response.status}`)
+      error.status = response.status
+      error.rate = rate
+      error.body = body
+      throw error
+    }
+
+    return { body, rate }
+  } catch (caught) {
+    clearTimeout(timeoutId)
+    if (caught.name === 'AbortError' && !options.signal?.aborted) {
+      const error = new Error(`GitHub request to ${pathname} timed out after ${GITHUB_REQUEST_TIMEOUT_MS / 1000}s.`)
+      error.status = 504
+      throw error
+    }
+    throw caught
+  }
 }
 
-async function githubGraphQL(query, variables, authToken) {
+async function githubGraphQL(query, variables, authToken, options = {}) {
   if (!authToken) return null
-  const response = await fetch('https://api.github.com/graphql', {
-    method: 'POST',
-    headers: {
-      ...headersFor(authToken),
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ query, variables })
-  })
-  const rate = rateInfoFromResponse(response)
-  const body = await response.json()
-
-  if (!response.ok || body.errors?.length) {
-    const isUserNotFound = body.errors?.some((error) => error.type === 'NOT_FOUND' || error.message?.includes('Could not resolve to a User'))
-    if (isUserNotFound) return null
-
-    const message = body.errors?.map((error) => error.message).join('; ') || `GitHub GraphQL returned ${response.status}`
-    const error = new Error(message)
-    error.status = response.status || 400
-    error.rate = rate
-    error.body = body
-    throw error
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), GITHUB_REQUEST_TIMEOUT_MS)
+  if (options.signal) {
+    options.signal.addEventListener('abort', () => controller.abort())
   }
+  try {
+    const response = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        ...headersFor(authToken),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query, variables })
+    })
+    clearTimeout(timeoutId)
+    const rate = rateInfoFromResponse(response)
+    const body = await response.json().catch(() => ({}))
 
-  return { body: body.data, rate }
+    if (!response.ok || body.errors?.length) {
+      const isUserNotFound = body.errors?.some((error) => error.type === 'NOT_FOUND' || error.message?.includes('Could not resolve to a User'))
+      if (isUserNotFound) {
+        const error = new Error(`GitHub user "${variables.login}" was not found.`)
+        error.status = 404
+        throw error
+      }
+
+      const message = body.errors?.map((error) => error.message).join('; ') || `GitHub GraphQL returned ${response.status}`
+      const error = new Error(message)
+      error.status = response.status || 400
+      error.rate = rate
+      error.body = body
+      throw error
+    }
+
+    return { body: body.data, rate }
+  } catch (caught) {
+    clearTimeout(timeoutId)
+    if (caught.name === 'AbortError' && !options.signal?.aborted) {
+      const error = new Error(`GitHub GraphQL request timed out after ${GITHUB_REQUEST_TIMEOUT_MS / 1000}s.`)
+      error.status = 504
+      throw error
+    }
+    throw caught
+  }
 }
 
 const dashboardQuery = `
@@ -391,17 +431,27 @@ function contributionsFromEvents(events) {
 }
 
 async function fetchPublicBundle(username, authToken) {
-  const { body: user, rate: userRate } = await githubRest(`/users/${encodeURIComponent(username)}`, authToken)
-  const { body: repos, rate: reposRate } = await githubRest(`/users/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, authToken)
-  const { body: events, rate: eventsRate } = await githubRest(`/users/${encodeURIComponent(username)}/events/public?per_page=100`, authToken)
+  const [userRes, reposRes, eventsRes] = await Promise.all([
+    githubRest(`/users/${encodeURIComponent(username)}`, authToken),
+    githubRest(`/users/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, authToken),
+    githubRest(`/users/${encodeURIComponent(username)}/events/public?per_page=100`, authToken).catch(() => ({ body: [], rate: null }))
+  ])
+
+  const user = userRes.body
+  const userRate = userRes.rate
+  const repos = Array.isArray(reposRes.body) ? reposRes.body : []
+  const reposRate = reposRes.rate
+  const events = Array.isArray(eventsRes.body) ? eventsRes.body : []
+  const eventsRate = eventsRes.rate
 
   const pages = [repos]
-  let page = 2
-  while (repos.length === 100 && page <= 3) {
-    const { body: next } = await githubRest(`/users/${encodeURIComponent(username)}/repos?per_page=100&page=${page}&sort=updated`, authToken)
-    pages.push(next)
-    if (next.length < 100) break
-    page += 1
+  if (repos.length === 100) {
+    try {
+      const { body: next } = await githubRest(`/users/${encodeURIComponent(username)}/repos?per_page=100&page=2&sort=updated`, authToken)
+      if (Array.isArray(next)) pages.push(next)
+    } catch {
+      // Page 2 failure is non-fatal
+    }
   }
 
   const allRepos = pages.flat()
@@ -423,9 +473,9 @@ async function fetchCommitTiming(username, repos, authToken) {
   const candidates = repos
     .filter((repo) => repo.name && !repo.fork)
     .sort((a, b) => new Date(b.pushed_at || b.updated_at).getTime() - new Date(a.pushed_at || a.updated_at).getTime())
-    .slice(0, 5)
+    .slice(0, 3)
 
-  const results = await Promise.all(candidates.map(async (repo) => {
+  const timingPromise = Promise.all(candidates.map(async (repo) => {
     try {
       const { body } = await githubRest(`/repos/${encodeURIComponent(username)}/${encodeURIComponent(repo.name)}/commits?author=${encodeURIComponent(username)}&per_page=100`, authToken)
       return Array.isArray(body) ? body : []
@@ -434,7 +484,10 @@ async function fetchCommitTiming(username, repos, authToken) {
       return []
     }
   }))
-  const commits = results.flat()
+
+  const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve([]), 3500))
+  const results = await Promise.race([timingPromise, timeoutPromise])
+  const commits = Array.isArray(results) ? results.flat() : []
 
   const hours = Array.from({ length: 24 }, () => 0)
   const weekdays = Array.from({ length: 7 }, () => 0)
@@ -628,7 +681,12 @@ async function buildDashboard(username, authToken, includePrivate = false) {
   return cachedDashboard(key, async () => {
     let bundle = null
     if (authToken) {
-      bundle = await fetchGraphQLBundle(normalized, authToken)
+      try {
+        bundle = await fetchGraphQLBundle(normalized, authToken)
+      } catch (err) {
+        if (err.status === 404) throw err
+        bundle = null
+      }
     }
     if (!bundle) bundle = await fetchPublicBundle(normalized, authToken)
     if (!bundle) {
@@ -872,6 +930,12 @@ app.get('/api/dashboard/:username', async (req, res) => {
         secondary: error.status === 429 || Boolean(retryAfter),
         reset: reset || null,
         retryAfter: retryAfter || null
+      })
+    }
+    if (error.status === 504) {
+      return res.status(504).json({
+        error: error.message || 'GitHub took too long to respond. Please try again.',
+        timeout: true
       })
     }
     console.error('Dashboard error:', error)

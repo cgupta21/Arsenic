@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from 'react'
 import {
   Activity, AlertTriangle, ArrowUpRight, BarChart3, CalendarDays, CheckCircle2,
-  CircleDot, Code2, FolderGit2, GitBranch, Github, GitPullRequest, Globe2, LogIn, LogOut, Menu,
-  RefreshCw, Search, SearchX, ShieldCheck, Sparkles, Star, Users, WifiOff, X,
+  CircleDot, Code2, FolderGit2, Github, Globe2, LogIn, LogOut, Menu,
+  RefreshCw, Search, SearchX, ShieldCheck, Sparkles, Users, WifiOff, X,
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { Dashboard } from './types'
@@ -17,6 +17,7 @@ import { TimingPatterns } from './components/TimingPatterns'
 import { CompareView } from './components/CompareView'
 import { LandingPage } from './components/LandingPage'
 import { RegisterPage } from './components/RegisterPage'
+import { DeveloperIntelligenceOverview } from './components/DeveloperIntelligenceOverview'
 
 const fallbackUser = 'cgupta21'
 
@@ -91,6 +92,7 @@ export default function App() {
   const [loginPrompt, setLoginPrompt] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
   // Generation counter to prevent stale /api/me from restoring auth after logout
   const meGenRef = useRef(0)
@@ -186,35 +188,41 @@ export default function App() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    // Normalize input (username or profile URL)
-    const { username, error } = normalizeGithubInput(query);
-    if (error) {
-      setValidationError(error);
-      return;
-    }
-    setValidationError(null);
-    if (!username) return;
-
-    if (!sessionUser) {
-      try {
-        const usage = await consumeGuestSearch(username);
-        if (!usage.allowed) {
-          setLoginPrompt(true);
-          return;
-        }
-      } catch (caught) {
-        const message = caught instanceof Error ? caught.message.toLowerCase() : '';
-        if (message.includes('3 free searches') || message.includes('sign in with github')) {
-          setLoginPrompt(true);
-          return;
-        }
-        console.error('Search access check failed:', caught);
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      // Normalize input (username or profile URL)
+      const { username, error } = normalizeGithubInput(query);
+      if (error) {
+        setValidationError(error);
         return;
       }
-    }
+      setValidationError(null);
+      if (!username) return;
 
-    recent.add(username);
-    pushRoute(`/u/${encodeURIComponent(username)}`);
+      if (!sessionUser) {
+        try {
+          const usage = await consumeGuestSearch(username);
+          if (!usage.allowed) {
+            setLoginPrompt(true);
+            return;
+          }
+        } catch (caught) {
+          const message = caught instanceof Error ? caught.message.toLowerCase() : '';
+          if (message.includes('3 free searches') || message.includes('sign in with github')) {
+            setLoginPrompt(true);
+            return;
+          }
+          console.error('Search access check failed:', caught);
+          return;
+        }
+      }
+
+      recent.add(username);
+      pushRoute(`/u/${encodeURIComponent(username)}`);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const signOut = async () => {
@@ -761,6 +769,20 @@ function DashboardView({
     try { setSummary((await generateSummary(data.user.login)).summary) } catch (caught) { setSummary(caught instanceof Error ? caught.message : 'Developer summary unavailable.') } finally { setSummaryLoading(false) }
   }
 
+  const handleDashboardSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    const { username: normalized, error: valError } = normalizeGithubInput(query);
+    if (valError || !normalized) {
+      onSubmit(event);
+      return;
+    }
+    if (normalized.toLowerCase() === username.toLowerCase()) {
+      void load(normalized);
+      return;
+    }
+    onSubmit(event);
+  };
+
   return (
     <>
       <main>
@@ -771,7 +793,7 @@ function DashboardView({
             <p>Turn GitHub activity into intelligent signals about projects, consistency, collaboration, code volume, and repository health.</p>
             <div className="heroActions"><button className="textLink" onClick={() => pushRoute('/compare')}><Users size={15} /> Compare developers</button>{recentSearches.length > 0 && <span className="recentHint">Recent: {recentSearches.slice(0, 3).map((item) => <button key={item} onClick={() => onRecentSearch(item)}>{item}</button>)}</span>}</div>
           </div>
-          <form className="searchBox" onSubmit={onSubmit}>
+          <form className="searchBox" onSubmit={handleDashboardSubmit}>
             <Search size={18} aria-hidden="true" />
             <input aria-label="GitHub username or profile URL" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search GitHub username or paste profile URL" />
             <button disabled={loading}>{loading ? 'Loading…' : 'Analyze'}</button>
@@ -839,7 +861,30 @@ function DashboardView({
                   </button>
                 </div>
               </div>
-            ) : error.status === 502 || error.status === 500 || error.status === 503 || error.status === 504 || error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('could not reach') || error.message.toLowerCase().includes('network') ? (
+            ) : error.status === 504 || error.timedOut || error.message.toLowerCase().includes('timed out') ? (
+              <div className="stateCard" role="alert">
+                <div className="stateCardIcon terracotta">
+                  <AlertTriangle size={26} />
+                </div>
+                <h3>Request timed out</h3>
+                <p>GitHub took too long to return signals for <code>@{username}</code>. This can happen during peak API load or when querying accounts with large histories.</p>
+                <div className="stateCardActions">
+                  <button type="button" className="primaryBtn" onClick={() => load(username)}>
+                    <RefreshCw size={14} /> Retry search
+                  </button>
+                  <button
+                    type="button"
+                    className="ghostBtn"
+                    onClick={() => {
+                      setQuery(fallbackUser)
+                      pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
+                    }}
+                  >
+                    View @{fallbackUser} showcase
+                  </button>
+                </div>
+              </div>
+            ) : error.status === 502 || error.status === 500 || error.status === 503 || error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('could not reach') || error.message.toLowerCase().includes('network') ? (
               <div className="stateCard" role="alert">
                 <div className="stateCardIcon sage">
                   <WifiOff size={26} />
@@ -921,28 +966,23 @@ function DashboardContent({
       {!data.authenticated && !data.estimated && <div className="notice"><LogIn size={16} /> Public API mode: activity is estimated from GitHub's public events feed (about the last 90 days). Add <code>GITHUB_TOKEN</code> on the server for the full contribution calendar and exact language volume.</div>}
       {data.api.graphqlRemaining !== null && <div className="rateBar"><span>GitHub GraphQL remaining: <b>{data.api.graphqlRemaining}</b></span><span>Cache: {Math.round(data.api.cacheTtlSeconds / 60)} min</span>{privateForSelf && <span>Private contribution counts enabled</span>}</div>}
 
-      <section id="overview" className="profileCard">
-        <img src={user.avatar_url} className="avatar" alt={`${user.login} avatar`} />
-        <div className="profileInfo">
-          <div className="profileName"><h2>{user.name || user.login}</h2><a href={user.html_url} target="_blank" rel="noreferrer" aria-label={`Open ${user.login} on GitHub`}><ArrowUpRight size={15} /></a></div>
-          <div className="handle">@{user.login}</div>
-          <p>{user.bio || 'No GitHub bio provided.'}</p>
-          <div className="meta">
-            {user.location && <span><Globe2 size={14} />{user.location}</span>}
-            <span><CalendarDays size={14} />Joined {formatDate(user.created_at)}</span>
-            <span><Users size={14} />{compactNumber(user.followers)} followers</span>
+      <section id="overview" className="overviewSection" aria-label="Developer Overview">
+        <div className="profileCard">
+          <img src={user.avatar_url} className="avatar" alt={`${user.login} avatar`} />
+          <div className="profileInfo">
+            <div className="profileName"><h2>{user.name || user.login}</h2><a href={user.html_url} target="_blank" rel="noreferrer" aria-label={`Open ${user.login} on GitHub`}><ArrowUpRight size={15} /></a></div>
+            <div className="handle">@{user.login}</div>
+            <p>{user.bio || 'No GitHub bio provided.'}</p>
+            <div className="meta">
+              {user.location && <span><Globe2 size={14} />{user.location}</span>}
+              <span><CalendarDays size={14} />Joined {formatDate(user.created_at)}</span>
+              <span><Users size={14} />{compactNumber(user.followers)} followers</span>
+            </div>
           </div>
+          <a className="outlineBtn" href={user.html_url} target="_blank" rel="noreferrer">View GitHub <ArrowUpRight size={15} /></a>
         </div>
-        <a className="outlineBtn" href={user.html_url} target="_blank" rel="noreferrer">View GitHub <ArrowUpRight size={15} /></a>
-      </section>
 
-      <section className="statsGrid" aria-label="Developer metrics">
-        <Stat icon={<GitBranch />} value={user.public_repos} label="Public repos" />
-        <Stat icon={<Activity />} value={data.contributions.total} label="Contributions / year" />
-        <Stat icon={<GitPullRequest />} value={score.raw.prs} label="Pull requests" />
-        <Stat icon={<Star />} value={score.raw.stars} label="Repository stars" />
-        <Stat icon={<CircleDot />} value={data.contributions.currentStreak} label="Current streak" />
-        <Stat icon={<Sparkles />} value={score.score} label="Arsenic score" accent />
+        <DeveloperIntelligenceOverview data={data} />
       </section>
 
       <section className="dashboardGrid">
@@ -1029,10 +1069,6 @@ function DashboardContent({
       </section>
     </>
   )
-}
-
-function Stat({ icon, value, label, accent = false }: { icon: ReactNode; value: number; label: string; accent?: boolean }) {
-  return <div className={accent ? 'stat accent' : 'stat'}><div className="statIcon">{icon}</div><strong>{compactNumber(value)}</strong><span>{label}</span></div>
 }
 
 function Card({ title, icon, action, children }: { title: string; icon: ReactNode; action?: string; children: ReactNode }) {

@@ -148,6 +148,7 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .outlineBtn, .ghostBtn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--border); color: var(--text); text-decoration: none; padding: 9px 13px; border-radius: 9px; font-size: 12px; font-weight: 700; background: var(--card); }
 .outlineBtn:hover, .ghostBtn:hover { border-color: var(--terracotta); }
 .authBtn { white-space: nowrap; height: 44px; min-height: 44px; padding: 0 14px; box-sizing: border-box; }
+.authBtnText { display: inline; }
 .authBtnGroup { display: flex; align-items: center; gap: 6px; }
 .googleAuthBtn:hover { border-color: #4285F4; }
 .loginPromptButtons { display: flex; flex-direction: column; gap: 9px; width: 100%; }
@@ -874,6 +875,17 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   }
 }
 
+@media (max-width: 640px) {
+  .authBtn .authBtnText {
+    display: none;
+  }
+  .authBtn {
+    padding: 0 10px;
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 480px) {
   .siteFooter {
     padding: 36px 14px 24px;
@@ -906,8 +918,10 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
     flex-direction: column;
   }
   .authBtn {
-    padding: 0 10px;
+    padding: 0 8px;
     font-size: 11px;
+    min-width: 40px;
+    justify-content: center;
     gap: 5px;
   }
   .authBtnGroup {

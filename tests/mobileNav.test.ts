@@ -39,6 +39,11 @@ describe('Mobile Navigation and Header', () => {
       expect(appCode).toContain('Sign in')
     })
 
+    it('Google Sign in button links to Google auth route /auth/google with accessible label', () => {
+      expect(appCode).toContain('href="/auth/google"')
+      expect(appCode).toContain('aria-label="Google Sign in"')
+    })
+
     it('locks body scroll when menu is open and restores it when closed', () => {
       expect(appCode).toContain("document.body.style.overflow = 'hidden'")
       expect(appCode).toContain("document.body.style.overflow = prevOverflow")

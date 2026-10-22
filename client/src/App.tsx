@@ -527,17 +527,29 @@ export default function App() {
                   type="button"
                   className="outlineBtn authBtn"
                   onClick={() => pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)}
+                  title="Try Free without login"
+                  aria-label="Try Free without login"
                 >
                   <Sparkles size={14} />
-                  <span>Try Free</span>
+                  <span className="authBtnText">Try Free</span>
                 </button>
                 <a
                   className="outlineBtn authBtn"
                   href="/auth/github"
                   title="Sign in with GitHub"
+                  aria-label="Sign in with GitHub"
                 >
                   <Github size={16} />
-                  <span>Sign in</span>
+                  <span className="authBtnText">GitHub</span>
+                </a>
+                <a
+                  className="outlineBtn authBtn googleAuthBtn"
+                  href="/auth/google"
+                  title="Google Sign in"
+                  aria-label="Google Sign in"
+                >
+                  <GoogleIcon />
+                  <span className="authBtnText">Google</span>
                 </a>
               </div>
             ) : (
@@ -546,17 +558,19 @@ export default function App() {
                   className="outlineBtn authBtn"
                   href="/auth/github"
                   title="Sign in with GitHub"
+                  aria-label="Sign in with GitHub"
                 >
                   <Github size={16} />
-                  <span>GitHub</span>
+                  <span className="authBtnText">GitHub</span>
                 </a>
                 <a
                   className="outlineBtn authBtn googleAuthBtn"
                   href="/auth/google"
-                  title="Sign in with Google"
+                  title="Google Sign in"
+                  aria-label="Google Sign in"
                 >
                   <GoogleIcon />
-                  <span>Google</span>
+                  <span className="authBtnText">Google</span>
                 </a>
               </div>
             )

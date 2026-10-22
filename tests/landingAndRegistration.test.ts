@@ -188,6 +188,23 @@ describe('Arsenic Landing Page & Registration Flow', () => {
       expect(appCode).toContain('href="/auth/github"')
     })
 
+    it('top navigation bar provides both Google and GitHub sign-in options linking to canonical OAuth routes', () => {
+      expect(appCode).toMatch(/href="\/auth\/google"[\s\S]*?title="Google Sign in"/)
+      expect(appCode).toMatch(/href="\/auth\/github"[\s\S]*?title="Sign in with GitHub"/)
+      expect(appCode).toContain('aria-label="Google Sign in"')
+      expect(appCode).toContain('aria-label="Sign in with GitHub"')
+      expect(appCode).toContain('googleAuthBtn')
+      expect(appCode).toContain('<GoogleIcon />')
+    })
+
+    it('top navigation in registration mode preserves Try Free and Privacy while offering both Google and GitHub buttons', () => {
+      // In route.mode === 'register', all three buttons must be rendered within authBtnGroup
+      expect(appCode).toContain("route.mode === 'register'")
+      expect(appCode).toContain('title="Try Free without login"')
+      expect(appCode).toContain('title="Google Sign in"')
+      expect(appCode).toContain('title="Sign in with GitHub"')
+    })
+
     it('popstate event listener handles browser back and forward navigation', () => {
       expect(appCode).toContain("window.addEventListener('popstate', handler)")
       expect(appCode).toContain("window.removeEventListener('popstate', handler)")

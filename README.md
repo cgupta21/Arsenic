@@ -14,6 +14,9 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
   <a href="https://arsenic-rho.vercel.app/">
     <img src="https://img.shields.io/badge/Live%20Demo-arsenic--rho.vercel.app-C96A45?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo">
   </a>
+  <a href="https://github.com/cgupta21/Arsenic/releases">
+    <img src="https://img.shields.io/badge/Version-2.0.0-D4A373?style=for-the-badge&logo=github" alt="Version 2.0.0">
+  </a>
   <a href="https://github.com/cgupta21/Arsenic">
     <img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github" alt="GitHub Repository">
   </a>
@@ -32,6 +35,10 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
 ## Screenshots & Visual Overview
 
 <p align="center">
+  <img src="docs/screenshots/landing-page.png" alt="Arsenic Landing Page & Repository Intelligence Entry" width="100%">
+</p>
+
+<p align="center">
   <img src="docs/screenshots/dashboard-overview.png" alt="Arsenic Developer Intelligence Dashboard Overview" width="100%">
 </p>
 
@@ -45,7 +52,22 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
   <img src="docs/screenshots/share-card.png" alt="Exportable Arsenic Developer Share Card (PNG & PDF)" width="100%">
 </p>
 
-> **Note on Visual Assets:** The previews above are genuine captures from Arsenic's developer dashboard, side-by-side comparison, contribution heatmap, and high-DPI export card. Additional captures of the landing page (`docs/screenshots/landing-page.png`) and repository health signals (`docs/screenshots/repository-analysis.png`) can be added directly to `docs/screenshots/`.
+> **Note on Visual Assets:** All previews above are genuine captures from Arsenic v2.0's running application—including the landing page, live developer dashboard with Developer Intelligence Overview, side-by-side comparison, contribution heatmap, and high-DPI export card.
+
+### How to Capture Screenshots from the Running Application
+To capture pixel-perfect screenshots directly from the running application:
+1. Start the local full-stack development server:
+   ```bash
+   npm run dev
+   ```
+2. Using headless Edge or Chrome, capture the landing page and developer dashboard:
+   ```powershell
+   # Landing Page (1280 × 1280)
+   & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1280,1280 --virtual-time-budget=6000 --screenshot="docs/screenshots/landing-page.png" "http://127.0.0.1:5173/"
+
+   # Developer Intelligence Dashboard (1280 × 1400)
+   & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1280,1400 --virtual-time-budget=6000 --screenshot="docs/screenshots/dashboard-overview.png" "http://127.0.0.1:5173/u/cgupta21"
+   ```
 
 ---
 
@@ -65,6 +87,32 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 ---
 
 ## Features
+
+### Developer Intelligence Overview
+- Embedded synthesis component (`DeveloperIntelligenceOverview`) summarizing developer health, velocity, and cadence directly at the top of the dashboard.
+- Real-time Arsenic Health Score (out of 100) paired with contextual health grades (`Excellent Health`, `Strong Health`, `Moderate Health`, `Developing Health`, `Low Activity`).
+- Dynamic behavioral badges evaluated directly from activity telemetry: `High Velocity`, `Active Collab`, `Solo Cadence`, `Steady Cadence`, `Active Maintenance`, `Clean Branching`, `Public Estimate`, and `High Reach`.
+- High-level metric strip tracking:
+  - **Commits & PRs:** Total volume paired with a 4-week trend indicator (recent 28 days vs. prior 28 days).
+  - **Active Streak:** Current daily contribution streak alongside historical longest streak.
+  - **PR Velocity:** Weekly pull request rate benchmarked against engineering cohorts (e.g., *Top 5% velocity*).
+  - **Tracked Repositories:** Total analyzed repositories with compact total star counts.
+- 64-day contribution density matrix (16 × 4 desktop / 8 × 8 mobile) visualizing recent contribution intensity alongside peak commit hours (UTC) and weekdays.
+- Color-coded multi-segment language distribution progress bar and legend.
+- In-page smooth-scroll navigation deep links directly to `#activity` and `#repositories`.
+
+### Dashboard Performance, Loading Resilience & Request Lifecycle
+- **Parallel GitHub API Aggregation:** `fetchPublicBundle` queries `/users/:username`, `/users/:username/repos`, and `/users/:username/events/public` simultaneously via `Promise.all`, preventing sequential network waterfalls.
+- **Non-Blocking Commit Timing Queries:** Recent repository candidate analysis is limited to the top 3 active non-fork repositories and raced against a bounded 3.5s timeout (`Promise.race`) so deep commit histories never stall dashboard rendering.
+- **Dedicated Request Timeouts:**
+  - Upstream backend REST and GraphQL queries are bounded by a 12-second abort controller (`GITHUB_REQUEST_TIMEOUT_MS = 12_000`).
+  - Frontend dashboard requests are bounded by an 18-second timeout (`DEFAULT_REQUEST_TIMEOUT_MS = 18_000`).
+- **Request Cancellation & Out-of-Order Protection:**
+  - Active in-flight `fetch` operations are aborted via `AbortController` whenever the query changes or the component unmounts.
+  - Request generation counters (`genRef`) discard out-of-order responses from cancelled searches, preventing stale data from overwriting newer queries.
+- **Duplicate Submission Prevention:** Form submission handlers lock submission state (`submitting` flag) during in-flight network requests, preventing rapid multi-clicks or duplicate submissions.
+- **Same-Profile Re-Query Optimization:** Submitting the username already loaded on the dashboard refreshes active data in-place without triggering an unnecessary view unmount.
+- **Granular 504 Timeout Error Recovery:** Dedicated HTTP 504 timeout error card with immediate "Retry search" action and one-click fallback to the `@cgupta21` showcase profile.
 
 ### Developer Profile Analytics
 - Analyzes public GitHub user profiles, bios, follower ratios, and repository counts.
@@ -141,7 +189,11 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 
 ### 6. Security Hardening, Strict Input Validation & Comprehensive Testing
 - **Challenge:** Protecting the application against parameter injection, cross-origin security violations, and iframe embedding without breaking GitHub user avatars or OAuth redirects.
-- **Implementation & Learning:** Integrated Helmet middleware with a tailored Content Security Policy (allowing `https://avatars.githubusercontent.com` and blob/data URIs), enforced HSTS in production, and locked down framing policies. Standardized strict GitHub username validation via regex (`/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`) returning HTTP 400 across all endpoints before calling upstream GitHub APIs. Backed the entire application with an automated test suite of 109 tests across 9 suites in Vitest.
+- **Implementation & Learning:** Integrated Helmet middleware with a tailored Content Security Policy (allowing `https://avatars.githubusercontent.com` and blob/data URIs), enforced HSTS in production, and locked down framing policies. Standardized strict GitHub username validation via regex `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`, returning HTTP 400 across all endpoints before calling upstream GitHub APIs. Backed the entire application with an automated test suite of 228 tests across 14 suites in Vitest.
+
+### 7. High-Concurrency Dashboard Loading, Request Cancellation & Timeout Resilience
+- **Challenge:** Fetching multiple upstream GitHub API endpoints sequentially (user profile, repository list, public event streams, and commit trees) introduced network waterfall delays. Slow upstream responses or network lag caused UI hanging, while rapid username searches caused out-of-order race conditions where stale data overwrote newer query results.
+- **Implementation & Learning:** Re-architected both backend aggregation and frontend state management for high concurrency. On the server, `fetchPublicBundle` executes `/users`, `/repos`, and `/events/public` concurrently via `Promise.all`, and commit timing queries are capped to top 3 repositories raced against a 3.5s bounded timeout (`Promise.race`) so deep commit histories never block the main dashboard response. On the frontend, `useDashboard` wraps all requests in a standardized `request()` utility with an 18-second timeout, `AbortController` cancellation for in-flight requests on query change or unmount, request generation counters (`genRef`) to discard stale responses, duplicate-submission locking (`submitting` state), and dedicated HTTP 504 timeout recovery UI with instantaneous retry capabilities.
 
 ---
 
@@ -201,6 +253,41 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - **Stateless Sessions vs. In-Memory Caching Realities:**
   - **Stateless Encrypted Sessions (`iron-session`):** User authentication and guest search counters are sealed using AES-256-GCM encryption in an HTTP-only browser cookie (`session`). Sessions are completely stateless on the server, meaning all Vercel serverless function invocations across cold starts and regions decrypt sessions identically without requiring a database or Redis.
   - **In-Memory Cache Realities (`cache`, `inflight`, `summaryCache`):** In-memory JavaScript `Map` data structures provide best-effort performance caching per warm serverless container. Caches are not shared globally between parallel instances or across cold starts; when an instance restarts or scales to zero, data is refetched from GitHub. This reduces upstream API traffic on warm instances without breaking application functionality or user sessions.
+
+### Repository & Project Structure
+
+```text
+Arsenic/
+├── .github/workflows/         # CI/CD workflows (lint, test, build pipeline)
+├── api/                       # Vercel serverless function entry points & adapters
+│   ├── auth/                  # GitHub & Google OAuth serverless handlers
+│   ├── compare/               # Side-by-side comparison serverless handler
+│   ├── dashboard/             # Dashboard telemetry serverless handler
+│   ├── meta/                  # Social crawler edge prerender handler (OG/Twitter HTML)
+│   └── summary/               # Deterministic developer narrative serverless handler
+├── client/                    # Vite + React 18 single page application
+│   ├── public/                # Favicon and client static assets
+│   ├── src/
+│   │   ├── components/        # UI components (DeveloperIntelligenceOverview, LandingPage, etc.)
+│   │   ├── hooks/             # Custom React hooks (useDashboard with timeout & abort control)
+│   │   ├── lib/               # Deterministic scoring algorithms, analytics, and date helpers
+│   │   ├── types/             # TypeScript interface definitions
+│   │   ├── App.tsx            # Main application router and view controller
+│   │   └── styles.css         # Curated theme styling, tokens, and responsive utilities
+│   └── index.html             # Client HTML entry
+├── docs/                      # Documentation and visual portfolio assets
+│   ├── screenshots/           # Application screenshots (landing, dashboard, compare, heatmap)
+│   └── social-preview.png     # Open Graph preview asset (1200 × 630 px)
+├── public/                    # Static public assets (favicons, manifests, branding)
+├── server/
+│   └── index.js               # Core Express application (data aggregation, caching, sessions)
+├── shared/
+│   └── validation.js          # Shared GitHub username regex validation
+├── tests/                     # 14 Vitest automated test suites (228 tests)
+├── Dockerfile                 # Multi-stage production container build
+├── render.yaml                # Persistent container deployment specification
+└── vercel.json                # Vercel routing, CSP edge headers, and serverless rewrites
+```
 
 ---
 
@@ -294,7 +381,7 @@ In **Google Cloud Console → APIs & Services → Credentials → Create Credent
   4. Navigate to the **Network** tab, reload the page, select the root document request (`arsenic-rho.vercel.app`), and inspect **Response Headers** to confirm the `content-security-policy` header is active.
   5. Search any profile (e.g. `@cgupta21`), open the developer card, and click **PNG Export** and **PDF Export**. Confirm that client-side rasterization completes and downloads cleanly without triggering CSP blocks on `blob:` or `data:` image generation.
 - **Input Sanitization & Username Validation:**
-  - Strict regex validation (`/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`) is enforced across all API routes (`/api/dashboard/:username`, `/api/summary/:username`, `/api/compare/:left/:right`, `/api/meta/:username`) before querying upstream GitHub services. Invalid usernames immediately return HTTP 400 and do not consume guest search quota.
+  - Strict regex validation with pattern `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/` is enforced across all API routes (`/api/dashboard/:username`, `/api/summary/:username`, `/api/compare/:left/:right`, `/api/meta/:username`) before querying upstream GitHub services. Invalid usernames immediately return HTTP 400 and do not consume guest search quota.
 
 ---
 
@@ -302,15 +389,15 @@ In **Google Cloud Console → APIs & Services → Credentials → Create Credent
 
 | Category | Technologies Used | Purpose |
 |:---|:---|:---|
-| **Frontend Core** | React 18, TypeScript, Vite | Fast, type-safe single page application |
+| **Frontend Core** | React 18, TypeScript, Vite 6 | Fast, type-safe single page application |
 | **Data Visualization** | Recharts, Custom CSS/SVG | Heatmaps, trend curves, and timing patterns |
 | **Icons & Styling** | Lucide React, Vanilla CSS | Lightweight UI without Tailwind overhead |
 | **Export Engines** | html2canvas, jsPDF | Client-side PNG and vector PDF report generation |
 | **Backend Runtime** | Node.js, Express | API orchestration, caching, and rate limiting (used by Vercel serverless functions and local dev) |
-| **Session & Auth** | iron-session | Sealed encrypted cookies for authentication and guest quota tracking without Redis |
+| **Session & Auth** | iron-session, jose | Sealed encrypted cookies for authentication, Google ID token verification, and guest quota tracking without Redis |
 | **Security Headers** | Helmet, CORS | Secure HTTP headers (CSP, HSTS, X-Frame-Options) and origin enforcement |
 | **External APIs** | GitHub REST API, GitHub GraphQL | Raw developer telemetry and contribution calendars |
-| **Testing Suite** | Vitest, TypeScript compiler | Unit, integration, and accessibility test suite |
+| **Testing Suite** | Vitest 5, TypeScript compiler | Unit, integration, and accessibility test suite |
 | **Hosting & CI** | Vercel, GitHub Actions | Automated lint/test/build pipeline and edge hosting |
 
 ---
@@ -396,7 +483,7 @@ npm run build
 
 ### What the Existing Tests Cover
 
-The project contains **12 automated test files with 200 passing tests**:
+The project contains **14 automated test files with 228 passing tests**:
 
 | Test Suite | File | Tests | Key Behaviors Verified |
 |:---|:---|:---:|:---|
@@ -406,14 +493,16 @@ The project contains **12 automated test files with 200 passing tests**:
 | **Security Hardening** | [`tests/securityHardening.test.ts`](tests/securityHardening.test.ts) | 26 | Helmet security headers, tailored Content Security Policy (CSP), Vercel edge configuration, strict GitHub username regex validation, crawler 400 security headers, and direct canvas-to-jsPDF embedding. |
 | **Mobile Nav & Header** | [`tests/mobileNav.test.ts`](tests/mobileNav.test.ts) | 25 | Semantic `<nav>`, `aria-expanded` and `aria-controls` bindings, mobile touch targets ($\ge 44\text{px}$), body scroll lock, Escape key dismiss, and responsive layout rules. |
 | **Website Improvements** | [`tests/websiteImprovements.test.ts`](tests/websiteImprovements.test.ts) | 21 | Open Graph / Twitter Card tags, exact 1200 × 630 px preview image binary dimensions, crawler edge rewrites, read-only OAuth scopes, privacy disclosures, and Scenarios A–E error UI. |
+| **Developer Intelligence Overview** | [`tests/developerIntelligenceOverview.test.ts`](tests/developerIntelligenceOverview.test.ts) | 19 | Live overview card rendering, health grade thresholds (Excellent/Strong/Moderate/Developing/Low), 4-week commit trend calculation, PR velocity, 64-day density matrix formatting, language bar, and section navigation anchors. |
 | **Streak Algorithms** | [`tests/streaks.test.ts`](tests/streaks.test.ts) | 18 | Daily contribution streak algorithms, leap year calculations, timezone offsets, weekend gaps, and active day counting. |
+| **Loading, Timeouts & Resilience** | [`tests/loadingAndTimeout.test.ts`](tests/loadingAndTimeout.test.ts) | 9 | Request timeouts, AbortController cancellation on input change/unmount, duplicate-submission lock, HTTP 504 timeout error mapping, retry handlers, and parallel API bundle fetching. |
 | **Guest Search Limits** | [`tests/searchLimit.test.ts`](tests/searchLimit.test.ts) | 8 | Guest quota enforcement (3 free distinct profile searches), cookie-based tracking, and verification that 400/404 errors do not consume credits. |
 | **Session & Logout** | [`tests/logout.test.ts`](tests/logout.test.ts) | 7 | Session termination on `POST /auth/logout`, cookie invalidation (`Max-Age=0`), cache-control headers, and session destruction. |
 | **Analytics & Scoring** | [`tests/analytics.test.ts`](tests/analytics.test.ts) | 6 | Score calculation weighting (Consistency, Collaboration, Impact), normalization to 100, and repository health status rules. |
 | **Developer Comparison** | [`tests/compare.test.ts`](tests/compare.test.ts) | 6 | Side-by-side comparison API endpoint, parallel developer fetching, delta calculations, and 400 validation for invalid names. |
 | **Authentication Errors** | [`tests/authError.test.tsx`](tests/authError.test.tsx) | 2 | Client request wrapper capturing 401 token expiration and attaching `authError: true` to trigger appropriate re-authentication UI. |
 
-> **Note on Quality Assurance:** Arsenic executes 200 unit and integration tests across 12 suites on every commit and pull request via GitHub Actions (`npm run check`).
+> **Note on Quality Assurance:** Arsenic executes 228 unit and integration tests across 14 suites on every commit and pull request via GitHub Actions (`npm run check`).
 
 ---
 

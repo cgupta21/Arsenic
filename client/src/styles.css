@@ -40,9 +40,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   -webkit-backdrop-filter: blur(16px);
   flex-wrap: nowrap;
 }
-.brand { display: flex; align-items: center; white-space: nowrap; flex-shrink: 0; }
-.brandButton { border: 0; background: none; padding: 0; display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; }
-.brandLogo { display: block; width: 118px; height: auto; max-height: 38px; object-fit: contain; }
+.brand { display: flex; align-items: center; white-space: nowrap; flex-shrink: 0; min-width: 0; }
+.brandButton { border: 0; background: none; padding: 0; display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; flex-shrink: 0; }
+.brandLogo { display: block; width: 118px; height: auto; max-height: 38px; object-fit: contain; flex-shrink: 0; }
 .footerLogo { width: 103px; }
 .nav { display: flex; align-items: center; gap: 22px; margin-right: auto; margin-left: 20px; }
 .nav a, .nav button {
@@ -70,6 +70,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   margin-left: auto;
   flex-shrink: 0;
   flex-wrap: nowrap;
+  min-width: 0;
 }
 .iconBtn, .accountBtn {
   width: 44px;
@@ -104,6 +105,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   padding: 0 10px;
   width: auto;
   min-width: 44px;
+}
+.privacyBtn {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.privacyBtn:hover, .privacyBtn:focus-visible {
+  border-color: var(--sage);
+  color: var(--text);
+  background: var(--card2);
+}
+.privacyBtn svg {
+  color: var(--sage);
+  flex-shrink: 0;
 }
 .accountBtn img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; }
 .accountBtn .accountName { font-size: 13px; font-weight: 500; color: var(--text); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -149,7 +178,7 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .outlineBtn:hover, .ghostBtn:hover { border-color: var(--terracotta); }
 .authBtn { white-space: nowrap; height: 44px; min-height: 44px; padding: 0 14px; box-sizing: border-box; }
 .authBtnText { display: inline; }
-.authBtnGroup { display: flex; align-items: center; gap: 6px; }
+.authBtnGroup { display: flex; align-items: center; gap: 6px; flex-shrink: 0; min-width: 0; }
 .googleAuthBtn:hover { border-color: #4285F4; }
 .loginPromptButtons { display: flex; flex-direction: column; gap: 9px; width: 100%; }
 .loginPromptButtons .loginPromptButton { width: 100%; }
@@ -290,16 +319,16 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   }
 }
 @media (max-width: 768px) {
-  #overview, #activity, #repositories, #insights { scroll-margin-top: 74px; }
+  #overview, #activity, #repositories, #insights { scroll-margin-top: 72px; }
   .topbar {
     padding: 0 16px;
-    height: 62px;
+    height: 60px;
     gap: 12px;
   }
   .nav {
     display: none;
     position: absolute;
-    top: 62px;
+    top: 60px;
     left: 0;
     right: 0;
     width: 100%;
@@ -314,7 +343,7 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
     gap: 6px;
     z-index: 55;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
-    max-height: calc(100vh - 62px);
+    max-height: calc(100vh - 60px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     box-sizing: border-box;
@@ -347,12 +376,42 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
     display: block;
     position: fixed;
     inset: 0;
-    top: 62px;
+    top: 60px;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     z-index: 40;
     touch-action: none;
+  }
+  .privacyBtnText {
+    display: none;
+  }
+  .actions .privacyBtn,
+  .privacyBtn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    justify-content: center;
+  }
+  .actions .iconBtn.mobileOnly,
+  .iconBtn.mobileOnly {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+  .accountBtn {
+    height: 44px;
+    min-height: 44px;
+    border-radius: 10px;
   }
   main { width:min(100% - 24px, 1180px); }.hero { padding:42px 0 30px; }.hero p { font-size:13px; } h1 { font-size:clamp(32px, 8vw, 48px); }
   .profileCard { align-items:flex-start; flex-wrap:wrap; }.profileInfo { min-width:calc(100% - 100px); }.profileCard .outlineBtn { width:100%; }
@@ -361,10 +420,82 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   .shareGrid { grid-template-columns:repeat(2,1fr); }.compareStats { grid-template-columns:repeat(2,1fr); }.compareForm { grid-template-columns:1fr; }.compareForm .primaryBtn { grid-column:auto; }
   footer { padding:20px 14px; align-items:flex-start; flex-direction:column; }
 }
+
+@media (max-width: 640px) {
+  #overview, #activity, #repositories, #insights { scroll-margin-top: 64px; }
+  .topbar {
+    height: 64px;
+    padding: 0 18px;
+    gap: 14px;
+  }
+  .nav {
+    top: 64px;
+    max-height: calc(100vh - 64px);
+  }
+  .navBackdrop {
+    top: 64px;
+  }
+  .brandButton {
+    min-height: 44px;
+  }
+  .brandLogo {
+    width: 108px;
+    max-height: 34px;
+  }
+  .actions {
+    gap: 14px;
+  }
+  /* Remove redundant Get Started CTA from mobile header below 640px */
+  .landingHeaderCta,
+  .topbar .navGetStartedBtn,
+  .navGetStartedBtn {
+    display: none !important;
+  }
+  .actions .privacyBtn,
+  .privacyBtn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+  .actions .iconBtn.mobileOnly,
+  .iconBtn.mobileOnly {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+  .authBtn .authBtnText {
+    display: none;
+  }
+  .authBtn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border-radius: 10px;
+    justify-content: center;
+  }
+  .accountBtn {
+    height: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    padding: 0 10px;
+  }
+}
+
 @media (max-width: 480px) {
-  .topbar { padding: 0 14px; gap: 10px; }
-  .actions { gap: 8px; }
-  .authBtn { padding: 0 12px; font-size: 12px; }
+  .topbar { padding: 0 16px; gap: 14px; }
+  .brandLogo { width: 102px; }
+  .actions { gap: 14px; }
   .hero { padding:32px 0 24px; gap:22px; } h1 { font-size:clamp(28px, 8.5vw, 40px); margin:14px 0 12px; }
   .searchBox { height:48px; padding:4px 4px 4px 12px; } .searchBox input { font-size:13px; padding:0 8px; } .searchBox button { height:38px; padding:0 14px; font-size:13px; }
   .card { padding:16px; border-radius:12px; } .profileCard { padding:16px; gap:14px; } .avatar { width:64px; height:64px; border-radius:12px; } .profileInfo { min-width:calc(100% - 80px); } .profileName h2 { font-size:19px; }
@@ -374,13 +505,35 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   .compareColumn { padding:16px 14px; border-radius:12px; } .compareBars > div { grid-template-columns:78px minmax(0,1fr) 24px; gap:6px; }
   .loginPrompt { padding:22px 16px; border-radius:14px; } .toast { top:70px; right:16px; left:16px; max-width:none; }
 }
+
 @media (max-width: 360px) {
   main { width:calc(100% - 16px); }
-  .topbar { padding: 0 10px; gap: 8px; }
+  .topbar { padding: 0 16px; gap: 12px; }
   .brandLogo { width: 96px; }
-  .actions { gap: 6px; }
-  .authBtn { padding: 0 10px; font-size: 11px; gap: 5px; }
-  .iconBtn, .accountBtn { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+  .actions { gap: 12px; }
+  .actions .privacyBtn,
+  .privacyBtn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+  .actions .iconBtn.mobileOnly,
+  .iconBtn.mobileOnly {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+  }
+  .accountBtn .accountName {
+    display: none;
+  }
   .nav { padding: 10px 12px; }
   .nav a, .nav button { padding: 10px 12px; font-size: 13px; }
   .searchBox { padding:4px; height:44px; } .searchBox input { font-size:12px; padding:0 6px; } .searchBox button { height:36px; padding:0 10px; font-size:12px; }
@@ -436,33 +589,7 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   to   { opacity: 1; transform: translateX(0)  scale(1);    }
 }
 
-/* ── Privacy Button in Header & Links ── */
-.privacyBtn {
-  height: 44px;
-  min-height: 44px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  background: var(--card);
-  color: var(--muted);
-  border-radius: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
-  white-space: nowrap;
-}
-.privacyBtn:hover, .privacyBtn:focus-visible {
-  border-color: var(--sage);
-  color: var(--text);
-  background: var(--card2);
-}
-.privacyBtn svg {
-  color: var(--sage);
-  flex-shrink: 0;
-}
+/* ── Privacy Links & Modal ── */
 .privacyLinkBtn {
   background: none;
   border: 0;
@@ -864,26 +991,6 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
     grid-template-columns: 1fr 1fr;
     gap: 20px;
   }
-  .privacyBtnText {
-    display: none;
-  }
-  .privacyBtn {
-    padding: 0;
-    width: 44px;
-    height: 44px;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 640px) {
-  .authBtn .authBtnText {
-    display: none;
-  }
-  .authBtn {
-    padding: 0 10px;
-    min-width: 44px;
-    justify-content: center;
-  }
 }
 
 @media (max-width: 480px) {
@@ -916,16 +1023,6 @@ footer { border-top: 1px solid var(--border); padding: 22px max(20px, calc((100%
   .stateCardAuthBtns {
     width: 100%;
     flex-direction: column;
-  }
-  .authBtn {
-    padding: 0 8px;
-    font-size: 11px;
-    min-width: 40px;
-    justify-content: center;
-    gap: 5px;
-  }
-  .authBtnGroup {
-    gap: 4px;
   }
   .footerBottom {
     flex-direction: column;

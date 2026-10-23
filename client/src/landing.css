@@ -98,6 +98,7 @@
   color: var(--terracotta);
   background: linear-gradient(135deg, var(--terracotta) 20%, var(--sand) 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 .landingSubcopy {
@@ -1277,6 +1278,12 @@
   box-shadow: 0 4px 14px rgba(201, 106, 69, 0.3);
   transition: all .15s ease;
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 .navGetStartedBtn:hover {
   background: #d47651;

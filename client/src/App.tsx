@@ -357,6 +357,17 @@ export default function App() {
           {route.mode === 'landing' ? (
             <>
               <a
+                href="/register"
+                className="mobileOnly mobileNavGetStarted"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setMenu(false)
+                  pushRoute('/register')
+                }}
+              >
+                Get Started
+              </a>
+              <a
                 href="#features"
                 onClick={(e) => {
                   e.preventDefault()
@@ -491,10 +502,10 @@ export default function App() {
             type="button"
             className="privacyBtn"
             onClick={() => setPrivacyOpen(true)}
-            title="OAuth permissions & privacy"
-            aria-label="OAuth permissions and privacy note"
+            title="Privacy"
+            aria-label="Privacy"
           >
-            <ShieldCheck size={14} />
+            <ShieldCheck size={20} />
             <span className="privacyBtnText">Privacy</span>
           </button>
           {sessionUser ? (
@@ -511,7 +522,7 @@ export default function App() {
             </button>
           ) : (
             route.mode === 'landing' ? (
-              <div className="authBtnGroup">
+              <div className="authBtnGroup landingHeaderCta">
                 <button
                   type="button"
                   className="navGetStartedBtn"

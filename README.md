@@ -136,27 +136,24 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - Serverless crawler edge route (`/u/:username` rewritten to `api/meta/[username].js`) delivering metadata to social crawlers without client-side SPA execution.
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
 
-### Session Management & Access Control
-- **Stateless Encrypted Sessions:** Authentication credentials and guest state are sealed inside client cookies using `iron-session` (AES-256-GCM).
-- **Strictly Read-Only OAuth:** Requests only `read:user user:email` with zero repository write scopes.
-- **Guest Search Allowance:** Unauthenticated visitors receive 3 free distinct profile searches before being prompted to sign in.
-- Detailed architecture and quota preservation rules are documented in the [Authentication Documentation](docs/authentication.md).
+### Session & Access Control
+- Stateless encrypted session cookies (`iron-session`) and guest search allowance with strictly read-only OAuth scopes (`read:user user:email`). See the authoritative [Rate Limiting & Session Architecture](#rate-limiting--session-architecture) section and [Authentication Documentation](docs/authentication.md).
 
 ---
 
 ## Challenges and What I Learned
 
 ### 1. Dual REST & GraphQL GitHub Integration
-- **Challenge:** GitHub's unauthenticated REST API limits clients to 60 requests per hour per IP address, while the GraphQL API requires authentication but provides rich one-year contribution calendars.
-- **Implementation & Learning:** Implemented a hybrid fetching pipeline in `server/index.js`. When authenticated with a token, Arsenic queries the GraphQL API for complete calendars and byte-level language stats. When unauthenticated, the engine falls back to the public events feed (~90-day activity estimate). Requests are cached in memory with in-flight deduplication to conserve rate limits. See [Rate Limiting & Caching Documentation](docs/rate-limits-and-caching.md) for details.
+- **Challenge:** GitHub's unauthenticated REST API limits clients to 60 requests per hour per IP address, while the GraphQL API requires authentication but provides rich contribution calendars.
+- **Implementation & Learning:** Implemented a hybrid fetching pipeline in `server/index.js` that queries GraphQL when authenticated and gracefully falls back to the public events feed when unauthenticated, using in-memory caching and request deduplication. See [Rate Limiting & Caching Documentation](docs/rate-limits-and-caching.md).
 
 ### 2. Encrypted-Cookie Sessions & Guest Quotas
 - **Challenge:** Providing a frictionless onboarding experience for visitors without requiring immediate sign-in, while maintaining stateless session security across ephemeral serverless containers.
-- **Implementation & Learning:** Implemented an encrypted client-side session model using `iron-session`. Session credentials and guest quotas are sealed inside AES-256-GCM cookies, enabling stateless verification across serverless functions without requiring a centralized session database. Guest allowances track distinct analyses with quota preservation for repeat searches and error responses. See [Authentication Documentation](docs/authentication.md) for details.
+- **Implementation & Learning:** Implemented client-side encrypted sessions using `iron-session` with a guest search allowance, avoiding server-side database requirements across serverless instances. See [Authentication Documentation](docs/authentication.md).
 
 ### 3. Hybrid Vercel Serverless Architecture & Standalone Express Execution
 - **Challenge:** Single Page Applications deployed on serverless hosting often face cold starts, distinct routing rules between static assets and dynamic APIs, and volatile memory lifecycles.
-- **Implementation & Learning:** Structured the codebase so thin serverless functions in `api/` act as adapters delegating incoming HTTP requests directly to the Express application exported from `server/index.js`. This allows the exact same business logic to run on Vercel or inside a standalone Node/Express container (`npm start`). See [Deployment Documentation](docs/deployment.md) for details.
+- **Implementation & Learning:** Structured the codebase so thin serverless functions in `api/` act as adapters delegating incoming HTTP requests directly to the Express application exported from `server/index.js`. This allows the exact same business logic to run on Vercel or inside a standalone Node/Express container (`npm start`). See [Deployment Documentation](docs/deployment.md).
 
 ### 4. Social Crawler Edge Prerendering for Dynamic Profile Links
 - **Challenge:** Client-side SPAs render empty HTML shells until JavaScript runs in the browser. Social media bots scraping profile links (`/u/:username`) do not execute client JS and receive blank previews.
@@ -164,11 +161,11 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 
 ### 5. Mobile Responsiveness & Canvas Export Reliability (PNG/PDF)
 - **Challenge:** On mobile browsers, navigation elements overlapped, and export actions failed due to canvas tainting from cross-origin avatars and high-DPI memory constraints.
-- **Implementation & Learning:** Refactored navigation to use semantic `<nav>` elements with ARIA attributes, body scroll locking, and minimum 44px or larger touch targets. For exports, added `crossOrigin="anonymous"` to avatars to prevent CORS canvas tainting, awaited `document.fonts.ready`, and passed the canvas directly to `jsPDF`.
+- **Implementation & Learning:** Refactored navigation to use semantic `<nav>` elements with ARIA attributes, body scroll locking, and touch targets of at least 44px. For exports, added `crossOrigin="anonymous"` to avatars to prevent CORS canvas tainting, awaited `document.fonts.ready`, and passed the canvas directly to `jsPDF`.
 
 ### 6. Security Hardening, Strict Input Validation & Testing
 - **Challenge:** Protecting the application against parameter injection, cross-origin security violations, and iframe embedding without breaking user avatars or OAuth redirects.
-- **Implementation & Learning:** Integrated Helmet middleware with a tailored Content Security Policy, enforced HSTS in production, and locked down framing policies. Standardized strict GitHub username validation via regex `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`, returning HTTP 400 before calling upstream APIs. Backed the application with an automated Vitest test suite. See [Security Documentation](docs/security.md) for details.
+- **Implementation & Learning:** Integrated Helmet middleware with a tailored Content Security Policy, enforced HSTS in production, and locked down framing policies. Standardized strict GitHub username validation via regex `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/`, returning HTTP 400 before calling upstream APIs. Backed the application with an automated Vitest test suite. See [Security Documentation](docs/security.md).
 
 ### 7. Concurrency, Request Cancellation & Timeout Resilience
 - **Challenge:** Fetching multiple upstream GitHub API endpoints sequentially introduced network waterfall delays. Rapid searches caused out-of-order race conditions where stale data overwrote newer query results.
@@ -270,11 +267,11 @@ This section serves as the authoritative overview of rate limiting and session h
 ### 2. Application Rate Limiting & In-Memory Caching
 - **API Protection:** General `/api/*` endpoints are limited to 90 requests/minute per IP, and `/api/summary/:username` is limited to 5 requests/10 minutes per IP (`express-rate-limit`).
 - **In-Memory Caching:** Telemetry data is cached in memory (`cache`) for 10 minutes (`CACHE_TTL_SECONDS = 600`), and summary narratives are cached for 1 hour (`summaryCache`). Concurrent duplicate queries are coalesced via an in-flight `Map`.
-- **Multi-Instance Behavior:** A shared store such as Redis would be needed for global rate limits across multiple serverless instances. In serverless deployments, in-memory caches and rate counters are container-scoped and reset on cold starts or across parallel instances. Per-instance state does not provide globally synchronized rate limiting.
+- **Serverless Instance State:** In-memory rate limiting is local to a serverless instance and does not provide globally shared limits across instances. Caches and rate counters are container-scoped and reset on cold starts or when requests hit different instances. A shared store such as Redis is a scaling option if globally synchronized rate limits and shared caching across instances are required in the future.
 
 ### 3. Stateless Encrypted Sessions (`iron-session`)
 - **Sealed Client Cookies:** Authentication state is stored entirely client-side in an HTTP-only, encrypted (`AES-256-GCM`) browser cookie (`session`). No database or centralized session store is required to decrypt sessions across cold starts or serverless instances sharing the same `SESSION_SECRET`.
-- **Guest Search Allowance:** Unauthenticated visitors receive 3 distinct successful profile analyses before being prompted to sign in. The allowance is tracked in the encrypted cookie; repeat views, failed queries (400, 404, 500), and the showcase profile (`cgupta21`) do not consume credits.
+- **Guest Search Allowance:** Unauthenticated visitors receive 3 free distinct profile analyses before being prompted to sign in. The allowance is tracked in the encrypted cookie; repeat views, failed queries (400, 404, 500), and the showcase profile (`cgupta21`) do not consume credits.
 - **Architectural Scope:** Cookie-based guest tracking is an onboarding UX guardrail to encourage OAuth sign-in rather than an adversarial security boundary. Backend resource protection relies on IP rate limiting and upstream GitHub limits.
 
 For deeper technical details, refer to:
@@ -285,11 +282,10 @@ For deeper technical details, refer to:
 
 ## Security Overview
 
-- **Stateless Encrypted Sessions:** Client cookies are encrypted using AES-256-GCM via `iron-session` with `HttpOnly`, `SameSite=Lax`, and `Secure` attributes.
-- **Strictly Read-Only OAuth:** Requests only `read:user` and `user:email`. Zero repository write, administrative, or workflow permissions are requested.
+- **Defense in Depth:** Enforces strict HTTP security headers via Helmet and Vercel edge rules, including a restrictive Content Security Policy (CSP), HSTS, and frame protections.
 - **Zero Persistent Storage:** Arsenic does not store user profiles, passwords, or repository data in a database.
-- **Content Security Policy (CSP):** Enforced at both the Vercel edge and Express layers, prohibiting external CDN scripts and restricting sources to trusted origins.
-- **Input Sanitization:** Strict regex pattern `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/` rejects invalid usernames with HTTP 400 before upstream requests are made.
+- **Strict Input Validation:** All API endpoints validate GitHub usernames using `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/` before making upstream requests.
+- **Credential Isolation:** OAuth secrets and personal access tokens remain strictly server-side; client sessions use encrypted cookies as detailed in [Rate Limiting & Session Architecture](#rate-limiting--session-architecture).
 - For complete CSP rules, DevTools verification steps, and threat mitigations, see the [Security Documentation](docs/security.md).
 
 ---
@@ -344,8 +340,10 @@ cp .env.example .env
 | `GITHUB_TOKEN` | **Recommended** | *(Empty)* | GitHub Personal Access Token. Unlocks 5,000 req/hr rate limit pool and GraphQL contribution calendars. If omitted, operates in Public API Mode (60 req/hr). |
 | `GITHUB_CLIENT_ID` | Optional | *(Empty)* | GitHub OAuth App Client ID (enables "Sign in with GitHub"). |
 | `GITHUB_CLIENT_SECRET` | Optional | *(Empty)* | GitHub OAuth App Client Secret. |
+| `GITHUB_CALLBACK_URL` | Optional | `http://127.0.0.1:5000/auth/github/callback` | Public OAuth callback URL. In production, set to `https://arsenic-rho.vercel.app/auth/github/callback`. Note: Vercel rewrites this public path to the internal serverless function `/api/auth/github/callback` via `vercel.json`; always configure the public `/auth/github/callback` path in your OAuth app and environment variables. |
 | `GOOGLE_CLIENT_ID` | Optional | *(Empty)* | Google Cloud OAuth 2.0 Client ID (enables "Sign in with Google"). |
 | `GOOGLE_CLIENT_SECRET` | Optional | *(Empty)* | Google Cloud OAuth 2.0 Client Secret. |
+| `GOOGLE_CALLBACK_URL` | Optional | `http://127.0.0.1:5000/auth/google/callback` | Public Google OAuth callback URL. In production, set to `https://arsenic-rho.vercel.app/auth/google/callback`. |
 | `CLIENT_ORIGIN` | Optional | `http://127.0.0.1:5173` | Allowed CORS origin for local development. |
 | `PORT` | Optional | `5000` | Port for the standalone Express server. |
 
@@ -395,7 +393,7 @@ The test suite validates the following core application behaviors across dedicat
 | **Google Authentication** | [`tests/googleAuth.test.ts`](tests/googleAuth.test.ts) | Google OAuth 2.0 PKCE flow, Google ID token verification, session persistence, non-destructive coexistence with GitHub sessions, and error handling. |
 | **OAuth State & Session Flow** | [`tests/oauthStateFlow.test.ts`](tests/oauthStateFlow.test.ts) | Dual state persistence (`oauth_state` cookie + session), HMAC signature validation, post-login dashboard redirect, and host resolution. |
 | **Security Hardening** | [`tests/securityHardening.test.ts`](tests/securityHardening.test.ts) | Helmet security headers, Content Security Policy (CSP), Vercel edge configuration, strict GitHub username regex validation, crawler 400 security headers, and direct canvas-to-jsPDF embedding. |
-| **Mobile Nav & Header** | [`tests/mobileNav.test.ts`](tests/mobileNav.test.ts) | Semantic `<nav>`, `aria-expanded` and `aria-controls` bindings, mobile touch targets (44px or larger), body scroll lock, Escape key dismiss, and responsive layout rules. |
+| **Mobile Nav & Header** | [`tests/mobileNav.test.ts`](tests/mobileNav.test.ts) | Semantic `<nav>`, `aria-expanded` and `aria-controls` bindings, mobile touch targets (at least 44px), body scroll lock, Escape key dismiss, and responsive layout rules. |
 | **Website Improvements** | [`tests/websiteImprovements.test.ts`](tests/websiteImprovements.test.ts) | Open Graph / Twitter Card tags, exact 1200 × 630 px preview image binary dimensions, crawler edge rewrites, read-only OAuth scopes, privacy disclosures, and Scenarios A–E error UI. |
 | **Developer Intelligence Overview** | [`tests/developerIntelligenceOverview.test.ts`](tests/developerIntelligenceOverview.test.ts) | Live overview card rendering, health grade thresholds (Excellent/Strong/Moderate/Developing/Low), 4-week commit trend calculation, PR velocity, 64-day density matrix formatting, language bar, and section navigation anchors. |
 | **Streak Algorithms** | [`tests/streaks.test.ts`](tests/streaks.test.ts) | Daily contribution streak algorithms, leap year calculations, timezone offsets, weekend gaps, and active day counting. |

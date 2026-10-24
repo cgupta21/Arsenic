@@ -56,6 +56,8 @@ Zero write scopes, repository administration, or workflow permissions are reques
 3. **Graceful Degradation When Not Configured:**
    - If `GITHUB_CLIENT_ID` or `GITHUB_CLIENT_SECRET` is unset, navigating to `/auth/github` returns HTTP 503 (`GitHub sign-in is not configured on this server.`). All public search and comparison features remain fully functional.
 
+> **Callback URL Distinction:** The public callback URL is `https://arsenic-rho.vercel.app/auth/github/callback` (or `http://127.0.0.1:5000/auth/github/callback` in local development). On Vercel, requests to this public path are routed to the serverless handler `api/auth/github/callback.js` via an edge rewrite in `vercel.json`. The GitHub OAuth application and `GITHUB_CALLBACK_URL` environment variable should always specify the public path (`/auth/github/callback`).
+
 ---
 
 ## 3. Google Cloud OAuth 2.0 Authentication

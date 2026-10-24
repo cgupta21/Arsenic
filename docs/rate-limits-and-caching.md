@@ -50,11 +50,10 @@ Arsenic uses in-memory JavaScript `Map` structures for caching:
 
 ---
 
-## 4. Multi-Instance & Serverless Limitations
+## 4. Multi-Instance & Serverless Behavior
 
 When deployed on serverless platforms such as Vercel:
 
-- **Container-Scoped Memory:** In-memory caches (`cache`, `summaryCache`) and rate limit tracking (`MemoryStore`) reside in process memory. Each warm serverless container maintains its own independent state.
-- **Independent State Across Instances:** Parallel serverless invocations, differing edge regions, and cold starts do not share cache entries or rate limit counters. When an instance restarts or scales down to zero, in-memory state resets.
-- **Distributed Store Requirement:** A shared store such as Redis would be needed for global rate limits across multiple serverless instances.
-- **Operational Trade-Off:** Per-instance in-memory tracking provides a lightweight, self-contained implementation without external infrastructure dependencies. A cache miss or counter reset across serverless containers results in a fresh upstream GitHub API call, which is transparently accommodated as long as upstream GitHub rate limits permit.
+- **Local Instance State:** In-memory rate limiting is local to a serverless instance and does not provide globally shared limits across instances. Each warm serverless container maintains its own process memory, which resets on cold starts or when requests are routed to new containers.
+- **Cache Behavior Across Instances:** Cache hits occur when requests land on a warm container with active entries. If a request hits a cold or separate instance, data is fetched fresh from upstream GitHub APIs, which is accommodated seamlessly within available GitHub token quotas.
+- **Shared Storage as a Scaling Option:** A shared store such as Redis is a scaling option if globally synchronized rate limits and centralized cross-instance caching are required in the future.

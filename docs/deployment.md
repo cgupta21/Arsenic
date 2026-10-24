@@ -33,6 +33,10 @@ The production application is hosted on Vercel as a unified full-stack project:
 
 ## 2. OAuth Provider Configuration
 
+> **Important Note on Callback URLs:**<br>
+> The public production callback URL registered with GitHub is `https://arsenic-rho.vercel.app/auth/github/callback`.<br>
+> On Vercel, `vercel.json` transparently rewrites incoming requests for `/auth/github/callback` to the internal serverless function `/api/auth/github/callback`. Do **not** register `/api/auth/github/callback` in GitHub OAuth settings or in `GITHUB_CALLBACK_URL`; always configure the public `/auth/github/callback` URL.
+
 ### GitHub OAuth App Setup
 1. In GitHub, go to **Settings → Developer settings → OAuth Apps → New OAuth App**.
 2. Fill in the application details:

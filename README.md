@@ -137,7 +137,7 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
 
 ### Session & Access Control
-- Stateless encrypted session cookies (`iron-session`) and guest search allowance with strictly read-only OAuth scopes (`read:user user:email`). See the authoritative [Rate Limiting & Session Architecture](#rate-limiting--session-architecture) section and [Authentication Documentation](docs/authentication.md).
+- Encrypted client sessions (`iron-session`), guest search allowance, and strictly read-only OAuth scopes (`read:user user:email`). For implementation details, see the [Authentication Documentation](docs/authentication.md).
 
 ---
 
@@ -149,7 +149,7 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 
 ### 2. Encrypted-Cookie Sessions & Guest Quotas
 - **Challenge:** Providing a frictionless onboarding experience for visitors without requiring immediate sign-in, while maintaining stateless session security across ephemeral serverless containers.
-- **Implementation & Learning:** Implemented client-side encrypted sessions using `iron-session` with a guest search allowance, avoiding server-side database requirements across serverless instances. See [Authentication Documentation](docs/authentication.md).
+- **Implementation & Learning:** Implemented client-side encrypted sessions to verify authentication and guest allowances across serverless instances without requiring an external database. See the [Authentication Documentation](docs/authentication.md).
 
 ### 3. Hybrid Vercel Serverless Architecture & Standalone Express Execution
 - **Challenge:** Single Page Applications deployed on serverless hosting often face cold starts, distinct routing rules between static assets and dynamic APIs, and volatile memory lifecycles.
@@ -282,11 +282,11 @@ For deeper technical details, refer to:
 
 ## Security Overview
 
-- **Defense in Depth:** Enforces strict HTTP security headers via Helmet and Vercel edge rules, including a restrictive Content Security Policy (CSP), HSTS, and frame protections.
-- **Zero Persistent Storage:** Arsenic does not store user profiles, passwords, or repository data in a database.
-- **Strict Input Validation:** All API endpoints validate GitHub usernames using `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/` before making upstream requests.
-- **Credential Isolation:** OAuth secrets and personal access tokens remain strictly server-side; client sessions use encrypted cookies as detailed in [Rate Limiting & Session Architecture](#rate-limiting--session-architecture).
-- For complete CSP rules, DevTools verification steps, and threat mitigations, see the [Security Documentation](docs/security.md).
+- **Security Headers & CSP:** Enforces strict HTTP security headers via Helmet and Vercel edge configuration, including a restrictive Content Security Policy (CSP), HSTS, and frame protections.
+- **Strict Input Validation:** All API endpoints validate GitHub usernames using `/^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/` before dispatching upstream requests.
+- **Zero Persistent Database Storage:** Arsenic does not store user profiles, passwords, tokens, or repository data in a database.
+- **Server-Side Credential Isolation:** OAuth client secrets and personal access tokens remain strictly on the server and are never exposed to browser clients.
+- For complete CSP rules, DevTools verification steps, and threat mitigations, see the [Security Documentation](docs/security.md) and [Authentication Documentation](docs/authentication.md).
 
 ---
 

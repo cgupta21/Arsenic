@@ -9,7 +9,8 @@ import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import fs from 'node:fs'
-import { calculateScore as calculateScoreModel } from '../shared/score.js'
+import { calculateScore as calculateScoreModel, getHealthGrade, getHealthGradeColor } from '../shared/score.js'
+import { renderBadgeSvg } from '../shared/badge.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 import { isValidGitHubUsername, GITHUB_USERNAME_REGEX } from '../shared/validation.js'
 import { fileURLToPath } from 'node:url'
@@ -219,7 +220,11 @@ async function githubRest(pathname, authToken = defaultToken, options = {}) {
     try { body = text ? JSON.parse(text) : null } catch { body = { message: text } }
 
     if (!response.ok) {
-      const error = new Error(body?.message || `GitHub API returned ${response.status}`)
+      let safeMessage = body?.message || `GitHub API returned ${response.status}`
+      if (typeof safeMessage === 'string') {
+        safeMessage = safeMessage.replace(/(gh[pousr]_[A-Za-z0-9_]{16,}|Bearer\s+[^\s]+)/gi, '[REDACTED]')
+      }
+      const error = new Error(safeMessage)
       error.status = response.status
       error.rate = rate
       error.body = body
@@ -232,6 +237,12 @@ async function githubRest(pathname, authToken = defaultToken, options = {}) {
     if (caught.name === 'AbortError' && !options.signal?.aborted) {
       const error = new Error(`GitHub request to ${pathname} timed out after ${GITHUB_REQUEST_TIMEOUT_MS / 1000}s.`)
       error.status = 504
+      throw error
+    }
+    if (caught.name !== 'AbortError' && !caught.status) {
+      const error = new Error('Could not reach GitHub right now. Please check your network connection and try again.')
+      error.status = 502
+      error.networkError = true
       throw error
     }
     throw caught
@@ -267,7 +278,10 @@ async function githubGraphQL(query, variables, authToken, options = {}) {
         throw error
       }
 
-      const message = body.errors?.map((error) => error.message).join('; ') || `GitHub GraphQL returned ${response.status}`
+      let message = body.errors?.map((error) => error.message).join('; ') || `GitHub GraphQL returned ${response.status}`
+      if (typeof message === 'string') {
+        message = message.replace(/(gh[pousr]_[A-Za-z0-9_]{16,}|Bearer\s+[^\s]+)/gi, '[REDACTED]')
+      }
       const error = new Error(message)
       error.status = response.status || 400
       error.rate = rate
@@ -281,6 +295,12 @@ async function githubGraphQL(query, variables, authToken, options = {}) {
     if (caught.name === 'AbortError' && !options.signal?.aborted) {
       const error = new Error(`GitHub GraphQL request timed out after ${GITHUB_REQUEST_TIMEOUT_MS / 1000}s.`)
       error.status = 504
+      throw error
+    }
+    if (caught.name !== 'AbortError' && !caught.status) {
+      const error = new Error('Could not reach GitHub right now. Please check your network connection and try again.')
+      error.status = 502
+      error.networkError = true
       throw error
     }
     throw caught
@@ -684,7 +704,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       try {
         bundle = await fetchGraphQLBundle(normalized, authToken)
       } catch (err) {
-        if (err.status === 404) throw err
+        if (err.status === 404 || err.status === 429 || err.status === 504 || err.rate?.remaining === '0') throw err
         bundle = null
       }
     }
@@ -861,7 +881,7 @@ app.post('/api/search/consume', async (req, res) => {
 app.get('/api/dashboard/:username', async (req, res) => {
   const username = req.params.username.replace(/^@/, '').trim()
   if (!isValidGitHubUsername(username)) {
-    return res.status(400).json({ error: 'Invalid GitHub username.' })
+    return res.status(400).json({ error: 'Invalid GitHub username.', invalidInput: true })
   }
   const lowerUser = username.toLowerCase()
   const privateScope = userCanSeePrivate(req, username)
@@ -912,16 +932,17 @@ app.get('/api/dashboard/:username', async (req, res) => {
     }
   } catch (error) {
     if (error.status === 400) {
-      return res.status(400).json({ error: error.message || 'Invalid GitHub username.' })
+      return res.status(400).json({ error: error.message || 'Invalid GitHub username.', invalidInput: true })
     }
     if (error.status === 404 || error.message?.includes('was not found') || error.message?.includes('Could not resolve to a User')) {
-      return res.status(404).json({ error: `GitHub user "${username}" was not found.` })
+      return res.status(404).json({ error: `GitHub user "${username}" was not found.`, notFound: true })
     }
 
     const remaining = error.rate?.remaining
     const reset = error.rate?.reset
     const retryAfter = error.rate?.retryAfter
-    if (error.status === 429 || (error.status === 403 && remaining === '0')) {
+    const isRateLimit = error.status === 429 || (error.status === 403 && (remaining === '0' || error.message?.toLowerCase().includes('rate limit')))
+    if (isRateLimit) {
       return res.status(429).json({
         error: error.status === 429
           ? 'GitHub temporarily throttled this integration. Please wait before trying again.'
@@ -934,12 +955,21 @@ app.get('/api/dashboard/:username', async (req, res) => {
     }
     if (error.status === 504) {
       return res.status(504).json({
-        error: error.message || 'GitHub took too long to respond. Please try again.',
+        error: 'GitHub took too long to respond. Please try again.',
         timeout: true
       })
     }
-    console.error('Dashboard error:', error)
-    return res.status(502).json({ error: error.message || 'Could not reach GitHub right now. Please try again.' })
+    if (error.networkError) {
+      return res.status(502).json({
+        error: 'Could not reach GitHub right now. Please check your network connection and try again.',
+        networkError: true
+      })
+    }
+    console.error('Dashboard error:', error?.message || error)
+    return res.status(502).json({
+      error: 'Could not reach GitHub right now. Please try again.',
+      upstreamError: true
+    })
   }
 })
 
@@ -1008,11 +1038,122 @@ app.get('/api/meta/:username', (req, res) => {
   return res.status(200).send(html)
 })
 
+const badgeLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    const svg = renderBadgeSvg({
+      label: 'arsenic',
+      value: 'rate limited',
+      statusColor: '#C96A45',
+      title: 'arsenic: rate limited'
+    })
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    return res.status(429).send(svg)
+  }
+})
+
+app.get(['/badge/:username', '/api/badge/:username'], badgeLimiter, async (req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+
+  const rawUser = req.params.username || ''
+  const username = decodeURIComponent(String(rawUser)).replace(/^@/, '').trim()
+
+  if (!isValidGitHubUsername(username)) {
+    const svg = renderBadgeSvg({
+      label: 'arsenic',
+      value: 'invalid user',
+      statusColor: '#C96A45',
+      title: 'arsenic: invalid user'
+    })
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    return res.status(400).send(svg)
+  }
+
+  try {
+    const data = await buildDashboard(username, defaultToken, false)
+    const score = data.score.score
+    const grade = getHealthGrade(score)
+    const color = getHealthGradeColor(score)
+
+    const svg = renderBadgeSvg({
+      label: 'arsenic',
+      value: `${score}/100 • ${grade}`,
+      statusColor: color,
+      title: `arsenic: ${score}/100 - ${grade}`
+    })
+
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=3600, stale-while-revalidate=86400')
+    return res.status(200).send(svg)
+  } catch (error) {
+    if (error.status === 400) {
+      const svg = renderBadgeSvg({
+        label: 'arsenic',
+        value: 'invalid user',
+        statusColor: '#C96A45',
+        title: 'arsenic: invalid user'
+      })
+      res.setHeader('Cache-Control', 'public, max-age=3600')
+      return res.status(400).send(svg)
+    }
+
+    if (error.status === 404 || error.message?.includes('was not found') || error.message?.includes('Could not resolve to a User')) {
+      const svg = renderBadgeSvg({
+        label: 'arsenic',
+        value: 'user not found',
+        statusColor: '#7A7870',
+        title: 'arsenic: user not found'
+      })
+      res.setHeader('Cache-Control', 'public, max-age=300')
+      return res.status(404).send(svg)
+    }
+
+    const remaining = error.rate?.remaining
+    const isRateLimit = error.status === 429 || (error.status === 403 && (remaining === '0' || error.message?.toLowerCase().includes('rate limit')))
+    if (isRateLimit) {
+      const svg = renderBadgeSvg({
+        label: 'arsenic',
+        value: 'rate limited',
+        statusColor: '#C96A45',
+        title: 'arsenic: rate limited'
+      })
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      return res.status(429).send(svg)
+    }
+
+    if (error.status === 504) {
+      const svg = renderBadgeSvg({
+        label: 'arsenic',
+        value: 'timeout',
+        statusColor: '#7A7870',
+        title: 'arsenic: timeout'
+      })
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      return res.status(504).send(svg)
+    }
+
+    console.error('Badge error:', error?.message || error)
+    const svg = renderBadgeSvg({
+      label: 'arsenic',
+      value: 'unavailable',
+      statusColor: '#7A7870',
+      title: 'arsenic: unavailable'
+    })
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    return res.status(502).send(svg)
+  }
+})
+
 app.get('/api/compare/:left/:right', async (req, res) => {
   const left = req.params.left.replace(/^@/, '').trim()
   const right = req.params.right.replace(/^@/, '').trim()
   if (!isValidGitHubUsername(left) || !isValidGitHubUsername(right)) {
-    return res.status(400).json({ error: 'Invalid GitHub username.' })
+    return res.status(400).json({ error: 'Invalid GitHub username.', invalidInput: true })
   }
   try {
     const [leftData, rightData] = await Promise.all([
@@ -1021,16 +1162,18 @@ app.get('/api/compare/:left/:right', async (req, res) => {
     ])
     res.json({ left: leftData, right: rightData })
   } catch (error) {
-    if (error.status === 400) return res.status(400).json({ error: error.message || 'Invalid GitHub username.' })
+    if (error.status === 400) return res.status(400).json({ error: error.message || 'Invalid GitHub username.', invalidInput: true })
     if (error.status === 401) {
       // Invalidate stale token and inform client
       req.session.githubAccessToken = null
       return res.status(401).json({ error: 'GitHub authentication expired. Please sign in again.', authError: true })
     }
-    if (error.status === 404) return res.status(404).json({ error: error.message })
+    if (error.status === 404) return res.status(404).json({ error: error.message, notFound: true })
     if (error.status === 429 || error.rate?.remaining === '0') return res.status(429).json({ error: 'GitHub is rate-limiting the comparison. Please wait and try again.', rateLimit: true })
-    console.error('Compare error:', error)
-    res.status(502).json({ error: error.message || 'Could not compare those profiles.' })
+    if (error.status === 504) return res.status(504).json({ error: 'GitHub took too long to respond. Please try again.', timeout: true })
+    if (error.networkError) return res.status(502).json({ error: 'Could not reach GitHub right now. Please check your network connection and try again.', networkError: true })
+    console.error('Compare error:', error?.message || error)
+    res.status(502).json({ error: 'Could not reach GitHub right now. Please try again.', upstreamError: true })
   }
 })
 
@@ -1430,7 +1573,7 @@ const distPath = path.resolve(__dirname, '../client/dist')
 if (process.env.VERCEL !== '1') {
   app.use(express.static(distPath))
   app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
+    if (req.path.startsWith('/api/') || req.path.startsWith('/auth/') || req.path.startsWith('/badge/')) return next()
     const indexPath = path.join(distPath, 'index.html')
     const match = req.path.match(/^\/u\/([^/]+)/)
     if (match) {
@@ -1481,7 +1624,8 @@ export {
   persistOAuthState,
   resolveOAuthCallbackUri,
   resolveFrontendOrigin,
-  resolvePostLoginRedirect
+  resolvePostLoginRedirect,
+  badgeLimiter
 }
 export default app
 

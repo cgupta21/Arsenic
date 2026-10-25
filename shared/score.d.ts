@@ -11,3 +11,5 @@ export function calculateScore(input: {
   score: number
   breakdown: { consistency: number; collaboration: number; impact: number }
 }
+export function getHealthGrade(score: number): string
+export function getHealthGradeColor(score: number): string

@@ -2,19 +2,13 @@ import { useMemo } from 'react'
 import { CheckCircle2, FolderGit2, GitBranch, Sparkles } from 'lucide-react'
 import type { Dashboard } from '../types'
 import { compactNumber, topTiming } from '../lib/analytics'
+import { getHealthGrade } from '../../../shared/score.js'
 
 export interface DeveloperIntelligenceOverviewProps {
   data: Dashboard
   loading?: boolean
 }
 
-function getHealthGrade(score: number): string {
-  if (score >= 85) return 'Excellent Health'
-  if (score >= 70) return 'Strong Health'
-  if (score >= 50) return 'Moderate Health'
-  if (score >= 30) return 'Developing Health'
-  return 'Low Activity'
-}
 
 function getDensityLevelClass(count: number): string {
   if (count <= 0) return 'lvl-0'

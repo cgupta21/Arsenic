@@ -6,7 +6,10 @@ Arsenic is a developer intelligence dashboard that analyzes GitHub profiles, rep
 
 <p align="center">
   <a href="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml">
-    <img src="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml/badge.svg" alt="CI Status">
+    <img src="https://github.com/cgupta21/Arsenic/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI Status">
+  </a>
+  <a href="https://arsenic-rho.vercel.app/u/cgupta21">
+    <img src="https://arsenic-rho.vercel.app/badge/cgupta21" alt="Arsenic Health Score">
   </a>
   <a href="LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="MIT License">
@@ -135,6 +138,26 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - Pre-rendered Open Graph and Twitter Cards (`summary_large_image`) with exact 1200 × 630 px preview assets.
 - Serverless crawler edge route (`/u/:username` rewritten to `api/meta/[username].js`) delivering metadata to social crawlers without client-side SPA execution.
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
+- Dynamic SVG score badge (`/badge/:username`) for embedding in GitHub READMEs.
+
+#### Embedding Dynamic Score Badge in GitHub READMEs
+Display your real-time Arsenic Health Score and contextual health grade directly on your GitHub profile README or project documentation:
+
+```markdown
+[![Arsenic Health Score](https://arsenic-rho.vercel.app/badge/USERNAME)](https://arsenic-rho.vercel.app/u/USERNAME)
+```
+
+Or using HTML:
+
+```html
+<a href="https://arsenic-rho.vercel.app/u/USERNAME">
+  <img src="https://arsenic-rho.vercel.app/badge/USERNAME" alt="Arsenic Health Score">
+</a>
+```
+
+- **Live & Dynamic:** Renders current score (`0–100`) and health grade (`Excellent Health`, `Strong Health`, `Moderate Health`, `Developing Health`, `Low Activity`).
+- **Zero Authentication Required:** Public endpoint accessible without an API key or login.
+- **Resilient & Cached:** Backed by in-memory caching and SVG fallback badges for rate limits and missing profiles.
 
 ### Session & Access Control
 - Encrypted client sessions (`iron-session`), guest search allowance, and strictly read-only OAuth scopes (`read:user user:email`). For implementation details, see the [Authentication Documentation](docs/authentication.md).
@@ -422,6 +445,7 @@ The test suite validates the following core application behaviors across dedicat
 |:---|:---|:---|
 | `GET` | `/api/health` | Service health status check. |
 | `GET` | `/api/dashboard/:username` | Returns aggregated developer telemetry, repositories, contribution calendar, and score. |
+| `GET` | `/badge/:username` | Public dynamic SVG score badge embedding developer health score and grade. |
 | `GET` | `/api/compare/:left/:right` | Returns side-by-side comparison metrics and delta benchmarks for two developers. |
 | `POST` | `/api/summary/:username` | Generates a deterministic developer summary narrative without third-party AI APIs. |
 | `GET` | `/api/meta/:username` | Returns crawler-optimized HTML with Open Graph and Twitter Cards for social bots. |

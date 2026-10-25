@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Download, FileText, Loader2 } from 'lucide-react'
+import { Check, Code, Download, FileText, Loader2 } from 'lucide-react'
 
 // jsPDF and html2canvas are large, so they are loaded only when someone actually exports.
 async function renderCard(targetId: string): Promise<HTMLCanvasElement | null> {
@@ -39,9 +39,22 @@ async function renderCard(targetId: string): Promise<HTMLCanvasElement | null> {
   })
 }
 
-export function ExportButtons({ targetId }: { targetId: string }) {
+export function ExportButtons({ targetId, username }: { targetId: string; username?: string }) {
   const [exporting, setExporting] = useState<'png' | 'pdf' | null>(null)
+  const [copiedBadge, setCopiedBadge] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const copyBadgeMarkdown = async () => {
+    if (!username) return
+    const badgeMarkdown = `[![Arsenic Health Score](https://arsenic-rho.vercel.app/badge/${encodeURIComponent(username)})](https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)})`
+    try {
+      await navigator.clipboard.writeText(badgeMarkdown)
+      setCopiedBadge(true)
+      setTimeout(() => setCopiedBadge(false), 2500)
+    } catch {
+      setError('Could not copy badge markdown to clipboard.')
+    }
+  }
 
   const exportPng = async () => {
     if (exporting) return
@@ -162,6 +175,18 @@ export function ExportButtons({ targetId }: { targetId: string }) {
           {exporting === 'pdf' ? <Loader2 size={15} className="spinner" /> : <FileText size={15} />}
           {exporting === 'pdf' ? 'Exporting…' : 'PDF'}
         </button>
+        {username && (
+          <button
+            type="button"
+            className="ghostBtn"
+            onClick={copyBadgeMarkdown}
+            aria-label="Copy SVG score badge Markdown for GitHub README"
+            title="Copy badge Markdown for README"
+          >
+            {copiedBadge ? <Check size={15} /> : <Code size={15} />}
+            {copiedBadge ? 'Badge Copied!' : 'README Badge'}
+          </button>
+        )}
       </div>
       {error && <span className="exportError" role="alert">{error}</span>}
     </div>

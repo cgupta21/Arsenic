@@ -63,11 +63,7 @@
       "destination": "/api/meta/:username"
     },
     {
-      "source": "/badge/:username",
-      "destination": "/api/badge/:username"
-    },
-    {
-      "source": "/((?!api|auth|badge|assets|.*\\.[^/]+$).*)",
+      "source": "/((?!api|auth|assets|.*\\.[^/]+$).*)",
       "destination": "/index.html"
     }
   ]

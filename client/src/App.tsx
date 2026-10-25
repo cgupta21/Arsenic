@@ -18,7 +18,6 @@ import { CompareView } from './components/CompareView'
 import { LandingPage } from './components/LandingPage'
 import { RegisterPage } from './components/RegisterPage'
 import { DeveloperIntelligenceOverview } from './components/DeveloperIntelligenceOverview'
-import { ScoreHistoryCard } from './components/ScoreHistoryCard'
 
 const fallbackUser = 'cgupta21'
 
@@ -834,7 +833,7 @@ function DashboardView({
 
         {error && (
           <div className="stateCardContainer">
-            {error.notFound || error.status === 404 || error.message.toLowerCase().includes('not found') || error.message.toLowerCase().includes('could not resolve') ? (
+            {error.status === 404 || error.message.toLowerCase().includes('not found') || error.message.toLowerCase().includes('could not resolve') ? (
               <div className="stateCard" role="alert">
                 <div className="stateCardIcon terracotta">
                   <SearchX size={26} />
@@ -910,59 +909,13 @@ function DashboardView({
                   </button>
                 </div>
               </div>
-            ) : error.invalidInput || error.status === 400 || error.message.toLowerCase().includes('invalid github username') ? (
-              <div className="stateCard" role="alert">
-                <div className="stateCardIcon terracotta">
-                  <CircleDot size={26} />
-                </div>
-                <h3>Invalid GitHub username</h3>
-                <p><code>@{username}</code> is not a valid GitHub username. Usernames may only contain alphanumeric characters and single hyphens, and cannot begin or end with a hyphen.</p>
-                <div className="stateCardActions">
-                  <button
-                    type="button"
-                    className="primaryBtn"
-                    onClick={() => {
-                      const input = document.querySelector('.searchBox input') as HTMLInputElement | null
-                      if (input) {
-                        input.focus()
-                        input.select()
-                      }
-                    }}
-                  >
-                    <Search size={14} /> Search another profile
-                  </button>
-                  <button
-                    type="button"
-                    className="ghostBtn"
-                    onClick={() => {
-                      setQuery(fallbackUser)
-                      pushRoute(`/u/${encodeURIComponent(fallbackUser)}`)
-                    }}
-                  >
-                    View @{fallbackUser} showcase
-                  </button>
-                </div>
-              </div>
-            ) : error.networkError || error.status === 0 || error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('offline') || error.message.toLowerCase().includes('network') ? (
-              <div className="stateCard" role="alert">
-                <div className="stateCardIcon terracotta">
-                  <WifiOff size={26} />
-                </div>
-                <h3>Network connection error</h3>
-                <p>Arsenic could not reach the server. Please check your internet connection and try again.</p>
-                <div className="stateCardActions">
-                  <button type="button" className="primaryBtn" onClick={() => load(username)}>
-                    <RefreshCw size={14} /> Retry connection
-                  </button>
-                </div>
-              </div>
-            ) : error.upstreamError || error.status === 502 || error.status === 500 || error.status === 503 || error.message.toLowerCase().includes('could not reach') || error.message.toLowerCase().includes('temporarily unavailable') ? (
+            ) : error.status === 502 || error.status === 500 || error.status === 503 || error.message.toLowerCase().includes('failed to fetch') || error.message.toLowerCase().includes('could not reach') || error.message.toLowerCase().includes('network') ? (
               <div className="stateCard" role="alert">
                 <div className="stateCardIcon sage">
                   <WifiOff size={26} />
                 </div>
                 <h3>GitHub service temporarily unavailable</h3>
-                <p>GitHub's servers are experiencing temporary disruptions. Profile signals could not be retrieved right now.</p>
+                <p>Arsenic could not connect to GitHub's servers right now. GitHub's API may be experiencing disruptions or your network connection might be interrupted.</p>
                 <div className="stateCardActions">
                   <button type="button" className="primaryBtn" onClick={() => load(username)}>
                     <RefreshCw size={14} /> Retry connection
@@ -1062,10 +1015,6 @@ function DashboardContent({
         <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`}><ContributionHeatmap data={data} /></Card>
       </section>
 
-      <section className="dashboardGrid fullWidthGrid">
-        <ScoreHistoryCard history={data.history} currentScore={score.score} username={user.login} />
-      </section>
-
       <section id="activity" className="dashboardGrid">
         <Card title="8-week contribution trend" icon={<BarChart3 />} action="Contribution calendar"><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={weeklyActivity}><defs><linearGradient id="fillArsenic" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#C96A45" stopOpacity=".42" /><stop offset="100%" stopColor="#C96A45" stopOpacity="0" /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" /><XAxis dataKey="week" stroke="var(--muted)" fontSize={11} /><YAxis allowDecimals={false} stroke="var(--muted)" fontSize={11} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text)' }} /><Area type="monotone" dataKey="activity" stroke="#C96A45" fill="url(#fillArsenic)" strokeWidth={2.5} /></AreaChart></ResponsiveContainer></div></Card>
         <Card title="Language mix by code volume" icon={<Code2 />} action={`${languages.length} detected`}>
@@ -1140,7 +1089,7 @@ function DashboardContent({
             <div className="shareGrid"><div><b>{compactNumber(data.contributions.total)}</b><span>contributions</span></div><div><b>{score.breakdown.consistency}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>
-          <ExportButtons targetId="share-card" username={user.login} />
+          <ExportButtons targetId="share-card" />
         </div>
       </section>
     </>

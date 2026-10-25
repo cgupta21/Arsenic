@@ -10,10 +10,6 @@ export interface DashboardError {
   retryAfter?: string | number | null
   secondary?: boolean
   timedOut?: boolean
-  networkError?: boolean
-  upstreamError?: boolean
-  invalidInput?: boolean
-  notFound?: boolean
 }
 
 export const DEFAULT_REQUEST_TIMEOUT_MS = 18_000
@@ -39,40 +35,23 @@ export async function request<T>(url: string, init?: RequestInit, timeoutMs = DE
     const body = await response.json().catch(() => ({}))
     if (!response.ok) {
       const isTimeout = response.status === 504 || Boolean(body.timeout)
-      const isNotFound = response.status === 404 || Boolean(body.notFound)
-      const isRateLimit = response.status === 429 || Boolean(body.rateLimit)
-      const isInvalid = response.status === 400 || Boolean(body.invalidInput)
-      const isNetwork = Boolean(body.networkError)
-      const isUpstream = Boolean(body.upstreamError) || (response.status >= 500 && response.status <= 503 && !isNetwork)
-
-      const defaultMsg = isTimeout
-        ? 'GitHub took too long to respond (request timed out). Please try again.'
-        : isNotFound
-        ? 'User not found.'
-        : isRateLimit
-        ? 'GitHub API rate limit reached. Please wait before trying again.'
-        : isInvalid
-        ? 'Invalid GitHub username.'
-        : isNetwork
-        ? 'Could not reach GitHub right now. Please check your network connection.'
-        : isUpstream
-        ? 'GitHub service is temporarily unavailable. Please try again shortly.'
-        : 'Request failed.'
-
       const err: Error & DashboardError = Object.assign(
-        new Error(body.error || defaultMsg),
+        new Error(
+          body.error ||
+          (isTimeout
+            ? 'GitHub took too long to respond (request timed out). Please try again.'
+            : response.status === 404
+            ? 'User not found.'
+            : 'Request failed.')
+        ),
         {
           authError: Boolean(body.authError),
           status: response.status,
-          rateLimit: isRateLimit,
+          rateLimit: Boolean(body.rateLimit) || response.status === 429,
           reset: body.reset ?? null,
           retryAfter: body.retryAfter ?? null,
           secondary: Boolean(body.secondary),
-          timedOut: isTimeout,
-          networkError: isNetwork,
-          upstreamError: isUpstream,
-          invalidInput: isInvalid,
-          notFound: isNotFound
+          timedOut: isTimeout
         }
       )
       throw err
@@ -95,17 +74,6 @@ export async function request<T>(url: string, init?: RequestInit, timeoutMs = DE
         }
       )
       throw timeoutErr
-    }
-    const isNetwork = caught instanceof TypeError || (errObj && !('status' in errObj) && (errObj.message.toLowerCase().includes('failed to fetch') || errObj.message.toLowerCase().includes('network') || errObj.message.toLowerCase().includes('fetch failed')))
-    if (isNetwork) {
-      const netErr: Error & DashboardError = Object.assign(
-        new Error('Could not connect to the server. Please check your internet connection and try again.'),
-        {
-          status: 0,
-          networkError: true
-        }
-      )
-      throw netErr
     }
     throw caught
   }
@@ -158,25 +126,8 @@ export function useDashboard(initialUsername: string) {
         const retryAfter = custom?.retryAfter ?? null
         const secondary = Boolean(custom?.secondary)
         const timedOut = Boolean(custom?.timedOut) || status === 504
-        const invalidInput = Boolean(custom?.invalidInput) || status === 400
-        const notFound = Boolean(custom?.notFound) || status === 404
-        const networkError = Boolean(custom?.networkError) || status === 0 || message.toLowerCase().includes('failed to fetch') || message.toLowerCase().includes('network')
-        const upstreamError = Boolean(custom?.upstreamError) || (typeof status === 'number' && status >= 500 && status <= 503 && !networkError)
 
-        const errObj: DashboardError = {
-          message,
-          status,
-          authError,
-          rateLimit,
-          reset,
-          retryAfter,
-          secondary,
-          timedOut,
-          networkError,
-          upstreamError,
-          invalidInput,
-          notFound
-        }
+        const errObj: DashboardError = { message, status, authError, rateLimit, reset, retryAfter, secondary, timedOut }
         setError(errObj)
         setLoading(false)
       }

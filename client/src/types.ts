@@ -1,7 +1,3 @@
-import type { HistorySummary, ScoreSnapshot } from '../../shared/history.js'
-
-export type { HistorySummary, ScoreSnapshot }
-
 export type User = {
   login: string
   name: string | null
@@ -81,7 +77,6 @@ export type Dashboard = {
       timingSamples: number
     }
   }
-  history?: HistorySummary
   authenticated: boolean
   estimated?: boolean
   privateContributions: boolean

@@ -3,6 +3,8 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 // @ts-expect-error – server/index.js is plain JS
 import app from '../server/index.js'
+// @ts-expect-error – api/[...path].js is plain JS
+import vercelCatchAllHandler from '../api/[...path].js'
 import {
   createScoreSnapshot,
   evaluateSnapshotEligibility,
@@ -279,6 +281,34 @@ describe('Phase 2: Score History', () => {
       expect(body.currentScore).toBe(72)
       expect(Array.isArray(body.snapshots)).toBe(true)
       expect((body.snapshots as ScoreSnapshot[])[0].score).toBe(72)
+
+      await clearUserHistory(user)
+    })
+
+    it('api/[...path].js catch-all serverless adapter forwards /api/history/:username correctly', async () => {
+      const user = 'catchallhistoryuser'
+      await clearUserHistory(user)
+      await recordScoreSnapshot(user, { score: 81 }, '2026-10-25')
+
+      await new Promise<void>((resolve, reject) => {
+        const server = createServer((req, res) => {
+          ;(vercelCatchAllHandler as (r: unknown, s: unknown) => void)(req, res)
+        })
+        server.listen(0, '127.0.0.1', () => {
+          const { port } = server.address() as AddressInfo
+          nativeFetch(`http://127.0.0.1:${port}/api/history/${user}`)
+            .then(async (r) => {
+              expect(r.status).toBe(200)
+              const data = (await r.json()) as { username: string; currentScore: number }
+              expect(data.username).toBe(user)
+              expect(data.currentScore).toBe(81)
+              resolve()
+            })
+            .catch(reject)
+            .finally(() => server.close())
+        })
+        server.on('error', reject)
+      })
 
       await clearUserHistory(user)
     })

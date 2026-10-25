@@ -11,6 +11,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { calculateScore as calculateScoreModel, getHealthGrade, getHealthGradeColor } from '../shared/score.js'
 import { renderBadgeSvg } from '../shared/badge.js'
+import { readUserHistory, recordScoreSnapshot } from './historyStore.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 import { isValidGitHubUsername, GITHUB_USERNAME_REGEX } from '../shared/validation.js'
 import { fileURLToPath } from 'node:url'
@@ -728,6 +729,8 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       timing
     })
 
+    const history = await recordScoreSnapshot(normalized, score)
+
     const repoHealth = repos.map((repo) => {
       const last = new Date(repo.pushed_at || repo.updated_at).getTime()
       const daysSince = Math.max(0, Math.floor((Date.now() - last) / 86400000))
@@ -756,6 +759,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       languages,
       timing,
       score,
+      history,
       authenticated: Boolean(authToken),
       estimated: Boolean(bundle.estimated),
       privateContributions: Boolean(includePrivate),
@@ -970,6 +974,21 @@ app.get('/api/dashboard/:username', async (req, res) => {
       error: 'Could not reach GitHub right now. Please try again.',
       upstreamError: true
     })
+  }
+})
+
+app.get('/api/history/:username', async (req, res) => {
+  const rawUser = req.params.username || ''
+  const username = decodeURIComponent(String(rawUser)).replace(/^@/, '').trim()
+  if (!isValidGitHubUsername(username)) {
+    return res.status(400).json({ error: 'Invalid GitHub username.', invalidInput: true })
+  }
+  try {
+    const history = await readUserHistory(username)
+    return res.json(history)
+  } catch (error) {
+    console.error('History read error:', error)
+    return res.status(500).json({ error: 'Could not load score history.' })
   }
 })
 
@@ -1625,7 +1644,9 @@ export {
   resolveOAuthCallbackUri,
   resolveFrontendOrigin,
   resolvePostLoginRedirect,
-  badgeLimiter
+  badgeLimiter,
+  readUserHistory,
+  recordScoreSnapshot
 }
 export default app
 

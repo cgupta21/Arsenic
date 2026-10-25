@@ -18,6 +18,7 @@ import { CompareView } from './components/CompareView'
 import { LandingPage } from './components/LandingPage'
 import { RegisterPage } from './components/RegisterPage'
 import { DeveloperIntelligenceOverview } from './components/DeveloperIntelligenceOverview'
+import { ScoreHistoryCard } from './components/ScoreHistoryCard'
 
 const fallbackUser = 'cgupta21'
 
@@ -1059,6 +1060,10 @@ function DashboardContent({
       <section className="dashboardGrid">
         <Card title="Score anatomy" icon={<Sparkles />} action={`Overall ${score.score}/100`}><ScoreBreakdown score={score} /></Card>
         <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`}><ContributionHeatmap data={data} /></Card>
+      </section>
+
+      <section className="dashboardGrid fullWidthGrid">
+        <ScoreHistoryCard history={data.history} currentScore={score.score} username={user.login} />
       </section>
 
       <section id="activity" className="dashboardGrid">

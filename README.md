@@ -159,6 +159,13 @@ Or using HTML:
 - **Zero Authentication Required:** Public endpoint accessible without an API key or login.
 - **Resilient & Cached:** Backed by in-memory caching and SVG fallback badges for rate limits and missing profiles.
 
+### Score History & Trajectory Tracking
+- Records dated daily snapshots of developer health scores, contextual grades, and scoring pillar breakdowns without external database services.
+- De-duplicates redundant observations on the same calendar day unless scores change.
+- Computes score deltas, trends (`up`, `down`, `neutral`), and observation windows across historical records.
+- Visualizes health trajectory using clean Recharts area charts, with honest empty and baseline states when history is still accumulating.
+- Dedicated endpoint: `GET /api/history/:username`.
+
 ### Session & Access Control
 - Encrypted client sessions (`iron-session`), guest search allowance, and strictly read-only OAuth scopes (`read:user user:email`). For implementation details, see the [Authentication Documentation](docs/authentication.md).
 
@@ -367,6 +374,9 @@ cp .env.example .env
 | `GOOGLE_CLIENT_ID` | Optional | *(Empty)* | Google Cloud OAuth 2.0 Client ID (enables "Sign in with Google"). |
 | `GOOGLE_CLIENT_SECRET` | Optional | *(Empty)* | Google Cloud OAuth 2.0 Client Secret. |
 | `GOOGLE_CALLBACK_URL` | Optional | `http://127.0.0.1:5000/auth/google/callback` | Public Google OAuth callback URL. In production, set to `https://arsenic-rho.vercel.app/auth/google/callback`. |
+| `UPSTASH_REDIS_REST_URL` | **Required for Prod Persistence** | *(Empty)* | Upstash Redis REST endpoint for durable score history across Vercel serverless cold starts. |
+| `UPSTASH_REDIS_REST_TOKEN` | **Required for Prod Persistence** | *(Empty)* | Upstash Redis REST bearer token (never exposed or logged). Compatible alternative: `KV_REST_API_URL` & `KV_REST_API_TOKEN`. |
+| `SCORE_HISTORY_DIR` | Optional | `data/history` | Local filesystem storage path override for developer history snapshots. |
 | `CLIENT_ORIGIN` | Optional | `http://127.0.0.1:5173` | Allowed CORS origin for local development. |
 | `PORT` | Optional | `5000` | Port for the standalone Express server. |
 
@@ -445,6 +455,7 @@ The test suite validates the following core application behaviors across dedicat
 |:---|:---|:---|
 | `GET` | `/api/health` | Service health status check. |
 | `GET` | `/api/dashboard/:username` | Returns aggregated developer telemetry, repositories, contribution calendar, and score. |
+| `GET` | `/api/history/:username` | Returns chronological score snapshots, previous score, score change, and trend direction. |
 | `GET` | `/badge/:username` | Public dynamic SVG score badge embedding developer health score and grade. |
 | `GET` | `/api/compare/:left/:right` | Returns side-by-side comparison metrics and delta benchmarks for two developers. |
 | `POST` | `/api/summary/:username` | Generates a deterministic developer summary narrative without third-party AI APIs. |

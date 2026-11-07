@@ -373,14 +373,16 @@ export function LandingPage({
 
           {/* Card 5: Search and Explore */}
           <div className="featureCard featureCardSpan">
-            <div className="featureCardIcon">
-              <Search size={20} />
+            <div className="featureCardMain">
+              <div className="featureCardIcon">
+                <Search size={20} />
+              </div>
+              <h3 className="featureCardTitle">Search and compare</h3>
+              <p className="featureCardDesc">
+                Look up any public developer profile or compare two developers head-to-head with our dedicated
+                comparison tool. Share persistent profile links and revisit recent searches instantly.
+              </p>
             </div>
-            <h3 className="featureCardTitle">Search and compare</h3>
-            <p className="featureCardDesc">
-              Look up any public developer profile or compare two developers head-to-head with our dedicated
-              comparison tool. Share persistent profile links and revisit recent searches instantly.
-            </p>
             <ul className="featureList">
               <li>Head-to-head comparison engine at <code>/compare</code></li>
               <li>Direct permalinks for developer profiles (<code>/u/:username</code>)</li>

@@ -43,16 +43,10 @@
   margin-bottom: 24px;
 }
 .landingBadgeDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--terracotta);
-  box-shadow: 0 0 10px var(--terracotta);
-  animation: pulse-dot 2.5s infinite;
-}
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: .4; transform: scale(.8); }
 }
 .landingBadgeTag {
   font-weight: 700;
@@ -99,13 +93,13 @@
   background: var(--terracotta);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all .2s ease;
+  transition: background-color .15s ease, border-color .15s ease;
   cursor: pointer;
   text-decoration: none;
 }
 .landingCtaPrimary:hover {
   background: #b55d3a;
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .landingCtaSecondary {
   display: inline-flex;
@@ -119,14 +113,13 @@
   border: 1px solid var(--border);
   color: var(--sand);
   backdrop-filter: blur(8px);
-  transition: all .2s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
   cursor: pointer;
 }
 .landingCtaSecondary:hover {
   background: var(--card2);
   border-color: var(--sage);
   color: var(--text);
-  transform: translateY(-2px);
 }
 
 /* Quick Search in Hero */
@@ -237,7 +230,7 @@
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
   overflow: hidden;
   text-align: left;
-  transition: transform .25s ease, border-color .25s ease;
+  transition: border-color .15s ease;
 }
 .dashboardPreviewCard:hover {
   border-color: rgba(201, 106, 69, 0.4);
@@ -596,12 +589,10 @@
   display: flex;
   flex-direction: column;
   text-align: left;
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  transition: border-color .15s ease;
 }
 .featureCard:hover {
-  transform: translateY(-3px);
-  border-color: rgba(201, 106, 69, 0.35);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  border-color: rgba(201, 106, 69, 0.4);
 }
 .featureCardSpan {
   grid-column: 1 / -1;
@@ -803,11 +794,11 @@
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
   cursor: pointer;
-  transition: all .15s ease;
+  transition: background-color .15s ease, border-color .15s ease;
 }
 .finalCtaPrimary:hover {
   background: #b55d3a;
-  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .finalCtaSecondary {
   display: inline-flex;
@@ -821,12 +812,11 @@
   border: 1px solid var(--border);
   color: var(--sand);
   cursor: pointer;
-  transition: all .15s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 .finalCtaSecondary:hover {
   border-color: var(--sage);
   color: var(--text);
-  transform: translateY(-2px);
 }
 
 /* ── Dedicated Registration Page ── */
@@ -960,7 +950,6 @@
 .continueWithGoogle:hover {
   border-color: var(--sand);
   background: #25241f;
-  transform: translateY(-1px);
 }
 .continueWithGithub {
   background: #201f1b;
@@ -970,7 +959,6 @@
 .continueWithGithub:hover {
   border-color: var(--terracotta);
   background: #282622;
-  transform: translateY(-1px);
 }
 
 .dividerOr {
@@ -1006,7 +994,6 @@
   background: rgba(229, 211, 179, 0.16);
   border-color: var(--sand);
   color: #fff;
-  transform: translateY(-1px);
 }
 .guestAllowanceNote {
   display: flex;
@@ -1219,7 +1206,6 @@
 }
 .navGetStartedBtn:hover {
   background: #d47651;
-  transform: translateY(-1px);
 }
 .loginPromptSecondaryActions {
   display: flex;
@@ -1365,5 +1351,17 @@
   }
   .previewCardBody {
     padding: 16px;
+  }
+}
+
+/* ── Prefers Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

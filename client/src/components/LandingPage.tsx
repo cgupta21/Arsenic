@@ -53,16 +53,15 @@ export function LandingPage({
           <div className="landingBadge">
             <span className="landingBadgeDot" />
             <span className="landingBadgeTag">Arsenic v2.0</span>
-            <span className="landingBadgeText">GitHub Repository & Developer Intelligence</span>
+            <span className="landingBadgeText">GitHub Developer Intelligence</span>
           </div>
 
           <h1 id="hero-heading" className="landingHeadline">
-            Understand Any <span className="brandAccent">GitHub Repository.</span>
+            Analyze GitHub repositories and <span className="brandAccent">developer cadence</span>
           </h1>
 
           <p className="landingSubcopy">
-            Turn raw repository activity, developer velocity, and commit signals into clear,
-            actionable intelligence. Analyze streaks, contribution health, and code impact in seconds.
+            Inspect commit frequency, repository health, contribution velocity, and collaboration patterns from public GitHub activity.
           </p>
 
           <div className="landingCtaGroup">
@@ -72,7 +71,7 @@ export function LandingPage({
               onClick={onGetStarted}
               id="hero-get-started-btn"
             >
-              <span>Get Started</span>
+              <span>Get started</span>
               <ArrowRight size={17} />
             </button>
             <button
@@ -82,12 +81,12 @@ export function LandingPage({
               id="hero-try-free-btn"
             >
               <Terminal size={16} />
-              <span>Try Free Without Login</span>
+              <span>Explore as guest</span>
             </button>
           </div>
 
           {/* Quick Search Bar directly in Hero */}
-          <form className="landingQuickSearch" onSubmit={handleHeroSubmit} role="search" aria-label="Quick repository search">
+          <form className="landingQuickSearch" onSubmit={handleHeroSubmit} role="search" aria-label="Repository search">
             <div className="landingSearchInputWrap">
               <Search size={18} className="landingSearchIcon" aria-hidden="true" />
               <input
@@ -97,12 +96,12 @@ export function LandingPage({
                   setHeroSearchInput(e.target.value)
                   if (heroSearchError) setHeroSearchError(null)
                 }}
-                placeholder="Search username or repo (e.g. cgupta21 or torvalds)…"
+                placeholder="GitHub username or repository (e.g. cgupta21 or torvalds)"
                 aria-label="GitHub username or repository handle"
                 className="landingSearchInput"
               />
               <button type="submit" className="landingSearchSubmitBtn">
-                Explore
+                Inspect
               </button>
             </div>
             {heroSearchError && (
@@ -153,7 +152,7 @@ export function LandingPage({
               </div>
               <div className="previewLivePill">
                 <span className="pulseIndicator" />
-                <span>Live Intelligence Preview</span>
+                <span>Sample analysis</span>
               </div>
             </div>
 
@@ -257,8 +256,8 @@ export function LandingPage({
             <Terminal size={18} />
           </div>
           <div className="pillarText">
-            <h3>Instant Intelligence</h3>
-            <p>Zero configuration required. Look up any public GitHub user or repository handle instantly.</p>
+            <h3>Fast lookup</h3>
+            <p>Inspect any public GitHub user or repository handle without configuration.</p>
           </div>
         </div>
         <div className="pillarItem">
@@ -266,8 +265,8 @@ export function LandingPage({
             <BarChart3 size={18} />
           </div>
           <div className="pillarText">
-            <h3>Contribution Timing</h3>
-            <p>Track day-of-week and hourly commit frequency to understand real engineering rhythms.</p>
+            <h3>Contribution timing</h3>
+            <p>Track day-of-week and hourly commit frequency to understand development patterns.</p>
           </div>
         </div>
         <div className="pillarItem">
@@ -275,8 +274,8 @@ export function LandingPage({
             <TrendingUp size={18} />
           </div>
           <div className="pillarText">
-            <h3>Repository Health</h3>
-            <p>Automated scoring across consistency, commit frequency, issue resolution, and maintenance.</p>
+            <h3>Repository health</h3>
+            <p>Scoring across consistency, commit frequency, issue resolution, and maintenance.</p>
           </div>
         </div>
         <div className="pillarItem">
@@ -284,8 +283,8 @@ export function LandingPage({
             <Shield size={18} />
           </div>
           <div className="pillarText">
-            <h3>Read-Only & Private</h3>
-            <p>Strictly read-only OAuth scopes. Ephemeral iron-session cookies without database persistence.</p>
+            <h3>Read-only access</h3>
+            <p>Read-only OAuth scopes. Ephemeral sessions without database persistence.</p>
           </div>
         </div>
       </section>
@@ -295,7 +294,7 @@ export function LandingPage({
         <div className="sectionHeader">
           <span className="sectionEyebrow">Features</span>
           <h2 id="features-heading" className="sectionTitle">
-            Everything you need to evaluate repositories and teams
+            Evaluate repositories and developer activity
           </h2>
           <p className="sectionSubtitle">
             Arsenic surfaces developer velocity, collaboration habits, and repository health directly
@@ -309,7 +308,7 @@ export function LandingPage({
             <div className="featureCardIcon">
               <FolderGit2 size={20} />
             </div>
-            <h3 className="featureCardTitle">Repository Intelligence</h3>
+            <h3 className="featureCardTitle">Repository metrics</h3>
             <p className="featureCardDesc">
               Inspect health scores, star and fork momentum, open issue resolution cadence, license validation,
               and codebase footprint across repositories.
@@ -326,7 +325,7 @@ export function LandingPage({
             <div className="featureCardIcon">
               <TrendingUp size={20} />
             </div>
-            <h3 className="featureCardTitle">Developer Activity Insights</h3>
+            <h3 className="featureCardTitle">Activity insights</h3>
             <p className="featureCardDesc">
               Analyze commit cadence, active streaks, weekly output distribution, and day-of-week commit habits
               to discover peak productivity windows.
@@ -343,7 +342,7 @@ export function LandingPage({
             <div className="featureCardIcon">
               <BarChart3 size={20} />
             </div>
-            <h3 className="featureCardTitle">Contribution Analysis</h3>
+            <h3 className="featureCardTitle">Contribution analysis</h3>
             <p className="featureCardDesc">
               Visual contribution heatmap mapped over 52 weeks, pull request vs issue distribution,
               language diversity, and public versus private scope awareness.
@@ -360,7 +359,7 @@ export function LandingPage({
             <div className="featureCardIcon">
               <Activity size={20} />
             </div>
-            <h3 className="featureCardTitle">Repository Summaries</h3>
+            <h3 className="featureCardTitle">Summaries</h3>
             <p className="featureCardDesc">
               Generate structured analytical takeaways and architectural highlights for any repository or
               developer profile on demand using verified event signals.
@@ -377,7 +376,7 @@ export function LandingPage({
             <div className="featureCardIcon">
               <Search size={20} />
             </div>
-            <h3 className="featureCardTitle">Search and Explore</h3>
+            <h3 className="featureCardTitle">Search and compare</h3>
             <p className="featureCardDesc">
               Look up any public developer profile or compare two developers head-to-head with our dedicated
               comparison tool. Share persistent profile links and revisit recent searches instantly.
@@ -396,10 +395,10 @@ export function LandingPage({
         <div className="sectionHeader">
           <span className="sectionEyebrow">How It Works</span>
           <h2 id="how-heading" className="sectionTitle">
-            Three steps from username to actionable intelligence
+            Three steps to inspect any repository
           </h2>
           <p className="sectionSubtitle">
-            No agents, no installations, no API keys needed for guests. Explore repository telemetry in seconds.
+            No agents or installations needed. Enter any public profile to inspect repository activity.
           </p>
         </div>
 
@@ -427,7 +426,7 @@ export function LandingPage({
                 <BarChart3 size={18} />
               </div>
             </div>
-            <h3 className="stepTitle">Analyze available repository information</h3>
+            <h3 className="stepTitle">Aggregate repository information</h3>
             <p className="stepDesc">
               Arsenic gathers public commit events, repository metrics, language breakdowns, and collaboration signals.
             </p>
@@ -443,9 +442,9 @@ export function LandingPage({
                 <Activity size={18} />
               </div>
             </div>
-            <h3 className="stepTitle">Explore the resulting insights</h3>
+            <h3 className="stepTitle">Explore developer insights</h3>
             <p className="stepDesc">
-              Inspect velocity scorecards, timing habits, active streaks, AI summaries, or compare multiple developers side by side.
+              Inspect velocity scorecards, timing habits, active streaks, AI summaries, or compare multiple developers side-by-side.
             </p>
             <div className="stepMiniPreview">
               <span className="tagTerracotta">Health: 94 / 100 • 42d Streak</span>
@@ -462,7 +461,7 @@ export function LandingPage({
             <span>Developer Intelligence Platform</span>
           </div>
           <h2 id="final-cta-heading" className="finalCtaTitle">
-            Ready to inspect GitHub repositories with precision?
+            Inspect GitHub repositories and developer patterns
           </h2>
           <p className="finalCtaSubtext">
             Start exploring developer intelligence now. 3 free searches for every visitor,
@@ -475,7 +474,7 @@ export function LandingPage({
               onClick={onGetStarted}
               id="final-get-started-btn"
             >
-              <span>Get Started</span>
+              <span>Get started</span>
               <ArrowRight size={17} />
             </button>
             <button
@@ -484,7 +483,7 @@ export function LandingPage({
               onClick={onTryFree}
               id="final-try-free-btn"
             >
-              <span>Try Free Without Login</span>
+              <span>Explore as guest</span>
             </button>
           </div>
         </div>

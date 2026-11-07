@@ -48,12 +48,6 @@ export function LandingPage({
 
   return (
     <div className="landingPage">
-      {/* Background ambient decorative glows */}
-      <div className="landingAmbient">
-        <div className="landingGlow1" aria-hidden="true" />
-        <div className="landingGlow2" aria-hidden="true" />
-      </div>
-
       {/* Hero Section */}
       <section className="landingHero" aria-labelledby="hero-heading">
         <div className="landingHeroContent">
@@ -64,7 +58,7 @@ export function LandingPage({
           </div>
 
           <h1 id="hero-heading" className="landingHeadline">
-            Understand Any <span className="highlightTerracotta">GitHub Repository.</span>
+            Understand Any <span className="brandAccent">GitHub Repository.</span>
           </h1>
 
           <p className="landingSubcopy">
@@ -260,7 +254,7 @@ export function LandingPage({
       {/* Value Pillars Strip */}
       <section className="landingPillars" aria-label="Key Capabilities">
         <div className="pillarItem">
-          <div className="pillarIcon terracotta">
+          <div className="pillarIcon">
             <Zap size={20} />
           </div>
           <div className="pillarText">
@@ -269,7 +263,7 @@ export function LandingPage({
           </div>
         </div>
         <div className="pillarItem">
-          <div className="pillarIcon sage">
+          <div className="pillarIcon">
             <BarChart3 size={20} />
           </div>
           <div className="pillarText">
@@ -278,7 +272,7 @@ export function LandingPage({
           </div>
         </div>
         <div className="pillarItem">
-          <div className="pillarIcon sand">
+          <div className="pillarIcon">
             <TrendingUp size={20} />
           </div>
           <div className="pillarText">
@@ -287,7 +281,7 @@ export function LandingPage({
           </div>
         </div>
         <div className="pillarItem">
-          <div className="pillarIcon terracotta">
+          <div className="pillarIcon">
             <Shield size={20} />
           </div>
           <div className="pillarText">
@@ -313,7 +307,7 @@ export function LandingPage({
         <div className="featuresGrid">
           {/* Card 1: Repository Intelligence */}
           <div className="featureCard">
-            <div className="featureCardIcon terracotta">
+            <div className="featureCardIcon">
               <FolderGit2 size={24} />
             </div>
             <h3 className="featureCardTitle">Repository Intelligence</h3>
@@ -330,7 +324,7 @@ export function LandingPage({
 
           {/* Card 2: Developer Activity Insights */}
           <div className="featureCard">
-            <div className="featureCardIcon sage">
+            <div className="featureCardIcon">
               <TrendingUp size={24} />
             </div>
             <h3 className="featureCardTitle">Developer Activity Insights</h3>
@@ -347,7 +341,7 @@ export function LandingPage({
 
           {/* Card 3: Contribution Analysis */}
           <div className="featureCard">
-            <div className="featureCardIcon sand">
+            <div className="featureCardIcon">
               <BarChart3 size={24} />
             </div>
             <h3 className="featureCardTitle">Contribution Analysis</h3>
@@ -364,7 +358,7 @@ export function LandingPage({
 
           {/* Card 4: Repository Summaries */}
           <div className="featureCard">
-            <div className="featureCardIcon terracotta">
+            <div className="featureCardIcon">
               <Cpu size={24} />
             </div>
             <h3 className="featureCardTitle">Repository Summaries</h3>
@@ -381,7 +375,7 @@ export function LandingPage({
 
           {/* Card 5: Search and Explore */}
           <div className="featureCard featureCardSpan">
-            <div className="featureCardIcon sage">
+            <div className="featureCardIcon">
               <Search size={24} />
             </div>
             <h3 className="featureCardTitle">Search and Explore</h3>
@@ -414,7 +408,7 @@ export function LandingPage({
           <div className="stepCard">
             <div className="stepHeader">
               <span className="stepNumber">01</span>
-              <div className="stepIcon terracotta">
+              <div className="stepIcon">
                 <Search size={22} />
               </div>
             </div>
@@ -430,7 +424,7 @@ export function LandingPage({
           <div className="stepCard">
             <div className="stepHeader">
               <span className="stepNumber">02</span>
-              <div className="stepIcon sage">
+              <div className="stepIcon">
                 <BarChart3 size={22} />
               </div>
             </div>
@@ -446,7 +440,7 @@ export function LandingPage({
           <div className="stepCard">
             <div className="stepHeader">
               <span className="stepNumber">03</span>
-              <div className="stepIcon sand">
+              <div className="stepIcon">
                 <Sparkles size={22} />
               </div>
             </div>

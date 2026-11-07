@@ -9,32 +9,7 @@
   position: relative;
   width: 100%;
   overflow-x: hidden;
-}
-.landingAmbient {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-.landingGlow1 {
-  position: absolute;
-  top: -150px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(1000px, 90vw);
-  height: 500px;
-  background: radial-gradient(ellipse at top, rgba(201, 106, 69, 0.15) 0%, rgba(135, 150, 106, 0.05) 50%, transparent 75%);
-  filter: blur(40px);
-}
-.landingGlow2 {
-  position: absolute;
-  top: 800px;
-  right: -100px;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(135, 150, 106, 0.09) 0%, transparent 70%);
-  filter: blur(60px);
+  background-color: var(--bg);
 }
 
 /* ── Landing Hero ── */
@@ -94,12 +69,9 @@
   margin: 0 0 20px;
   color: var(--text);
 }
+.brandAccent,
 .highlightTerracotta {
   color: var(--terracotta);
-  background: linear-gradient(135deg, var(--terracotta) 20%, var(--sand) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 .landingSubcopy {
   font-size: clamp(15px, 2vw, 18px);
@@ -127,15 +99,13 @@
   background: var(--terracotta);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 10px 28px rgba(201, 106, 69, 0.35);
   transition: all .2s ease;
   cursor: pointer;
   text-decoration: none;
 }
 .landingCtaPrimary:hover {
-  background: #d47651;
+  background: #b55d3a;
   transform: translateY(-2px);
-  box-shadow: 0 14px 34px rgba(201, 106, 69, 0.45);
 }
 .landingCtaSecondary {
   display: inline-flex;
@@ -566,25 +536,13 @@
 .pillarIcon {
   width: 36px;
   height: 36px;
-  border-radius: 12px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
   flex-shrink: 0;
-}
-.pillarIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.25);
-}
-.pillarIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.pillarIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
 }
 .pillarText h3 {
   margin: 0 0 4px;
@@ -662,24 +620,12 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
   margin-bottom: 16px;
-}
-.featureCardIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.28);
-}
-.featureCardIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.featureCardIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
 }
 .featureCardTitle {
   font-size: 20px;
@@ -763,23 +709,11 @@
   width: 40px;
   height: 40px;
   border-radius: 10px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
-}
-.stepIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.25);
-}
-.stepIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.stepIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
 }
 .stepTitle {
   font-size: 17px;
@@ -814,15 +748,14 @@
   padding: 32px 24px 80px;
 }
 .finalCtaCard {
-  background: linear-gradient(135deg, rgba(201, 106, 69, 0.15) 0%, rgba(23, 23, 20, 0.95) 40%, rgba(135, 150, 106, 0.12) 100%);
-  border: 1px solid rgba(201, 106, 69, 0.35);
+  background: var(--card);
+  border: 1px solid var(--border);
   border-radius: 24px;
   padding: 56px 32px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 .finalCtaBadge {
   display: inline-flex;
@@ -869,13 +802,12 @@
   border-radius: 12px;
   background: var(--terracotta);
   color: #fff;
-  border: none;
-  box-shadow: 0 10px 24px rgba(201, 106, 69, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   cursor: pointer;
   transition: all .15s ease;
 }
 .finalCtaPrimary:hover {
-  background: #d47651;
+  background: #b55d3a;
   transform: translateY(-2px);
 }
 .finalCtaSecondary {

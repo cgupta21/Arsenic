@@ -22,7 +22,7 @@ button, input, select { font: inherit; }
 button, a, select { -webkit-tap-highlight-color: transparent; }
 button { cursor: pointer; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--sage); outline-offset: 3px; }
-.app { min-height: 100vh; background: radial-gradient(circle at 70% 0%, rgba(201,106,69,.09), transparent 28%), var(--bg); color: var(--text); overflow-x: hidden; }
+.app { min-height: 100vh; background: var(--bg); color: var(--text); overflow-x: hidden; }
 
 .topbar {
   height: 64px;
@@ -144,7 +144,7 @@ main { width: min(1180px, calc(100% - 32px)); margin: auto; min-width: 0; }
 .hero { min-height: 390px; display: flex; align-items: end; justify-content: space-between; padding: 72px 0 48px; gap: 48px; }
 .heroCopy { min-width: 0; }
 .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .15em; color: var(--muted); display: flex; align-items: center; gap: 9px; }
-.pulseDot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); box-shadow: 0 0 0 4px rgba(135,150,106,.12); }
+.pulseDot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
 h1 { font-size: clamp(42px, 5vw, 70px); line-height: .98; letter-spacing: -.055em; margin: 20px 0 18px; max-width: 850px; }
 h1 em { color: var(--terracotta); font-style: normal; }
 .hero p { color: var(--muted); max-width: 640px; font-size: 15px; line-height: 1.78; margin: 0; }

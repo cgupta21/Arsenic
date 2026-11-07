@@ -1,17 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import {
+  Activity,
   ArrowRight,
   BarChart3,
   CheckCircle2,
-  Cpu,
   FolderGit2,
   GitBranch,
   Github,
   Search,
   Shield,
-  Sparkles,
+  Terminal,
   TrendingUp,
-  Zap,
 } from 'lucide-react'
 import { normalizeGithubInput } from '../lib/normalizeGithubInput'
 
@@ -82,7 +81,7 @@ export function LandingPage({
               onClick={onTryFree}
               id="hero-try-free-btn"
             >
-              <Sparkles size={16} />
+              <Terminal size={16} />
               <span>Try Free Without Login</span>
             </button>
           </div>
@@ -255,7 +254,7 @@ export function LandingPage({
       <section className="landingPillars" aria-label="Key Capabilities">
         <div className="pillarItem">
           <div className="pillarIcon">
-            <Zap size={20} />
+            <Terminal size={18} />
           </div>
           <div className="pillarText">
             <h3>Instant Intelligence</h3>
@@ -264,7 +263,7 @@ export function LandingPage({
         </div>
         <div className="pillarItem">
           <div className="pillarIcon">
-            <BarChart3 size={20} />
+            <BarChart3 size={18} />
           </div>
           <div className="pillarText">
             <h3>Contribution Timing</h3>
@@ -273,7 +272,7 @@ export function LandingPage({
         </div>
         <div className="pillarItem">
           <div className="pillarIcon">
-            <TrendingUp size={20} />
+            <TrendingUp size={18} />
           </div>
           <div className="pillarText">
             <h3>Repository Health</h3>
@@ -282,7 +281,7 @@ export function LandingPage({
         </div>
         <div className="pillarItem">
           <div className="pillarIcon">
-            <Shield size={20} />
+            <Shield size={18} />
           </div>
           <div className="pillarText">
             <h3>Read-Only & Private</h3>
@@ -308,7 +307,7 @@ export function LandingPage({
           {/* Card 1: Repository Intelligence */}
           <div className="featureCard">
             <div className="featureCardIcon">
-              <FolderGit2 size={24} />
+              <FolderGit2 size={20} />
             </div>
             <h3 className="featureCardTitle">Repository Intelligence</h3>
             <p className="featureCardDesc">
@@ -325,7 +324,7 @@ export function LandingPage({
           {/* Card 2: Developer Activity Insights */}
           <div className="featureCard">
             <div className="featureCardIcon">
-              <TrendingUp size={24} />
+              <TrendingUp size={20} />
             </div>
             <h3 className="featureCardTitle">Developer Activity Insights</h3>
             <p className="featureCardDesc">
@@ -342,7 +341,7 @@ export function LandingPage({
           {/* Card 3: Contribution Analysis */}
           <div className="featureCard">
             <div className="featureCardIcon">
-              <BarChart3 size={24} />
+              <BarChart3 size={20} />
             </div>
             <h3 className="featureCardTitle">Contribution Analysis</h3>
             <p className="featureCardDesc">
@@ -359,7 +358,7 @@ export function LandingPage({
           {/* Card 4: Repository Summaries */}
           <div className="featureCard">
             <div className="featureCardIcon">
-              <Cpu size={24} />
+              <Activity size={20} />
             </div>
             <h3 className="featureCardTitle">Repository Summaries</h3>
             <p className="featureCardDesc">
@@ -376,7 +375,7 @@ export function LandingPage({
           {/* Card 5: Search and Explore */}
           <div className="featureCard featureCardSpan">
             <div className="featureCardIcon">
-              <Search size={24} />
+              <Search size={20} />
             </div>
             <h3 className="featureCardTitle">Search and Explore</h3>
             <p className="featureCardDesc">
@@ -409,7 +408,7 @@ export function LandingPage({
             <div className="stepHeader">
               <span className="stepNumber">01</span>
               <div className="stepIcon">
-                <Search size={22} />
+                <Search size={18} />
               </div>
             </div>
             <h3 className="stepTitle">Find a GitHub user or repository</h3>
@@ -425,7 +424,7 @@ export function LandingPage({
             <div className="stepHeader">
               <span className="stepNumber">02</span>
               <div className="stepIcon">
-                <BarChart3 size={22} />
+                <BarChart3 size={18} />
               </div>
             </div>
             <h3 className="stepTitle">Analyze available repository information</h3>
@@ -441,7 +440,7 @@ export function LandingPage({
             <div className="stepHeader">
               <span className="stepNumber">03</span>
               <div className="stepIcon">
-                <Sparkles size={22} />
+                <Activity size={18} />
               </div>
             </div>
             <h3 className="stepTitle">Explore the resulting insights</h3>

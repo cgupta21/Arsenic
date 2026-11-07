@@ -140,18 +140,12 @@ export function LandingPage({
         <div className="landingPreviewContainer">
           <div className="dashboardPreviewCard" aria-label="Illustrative dashboard preview">
             <div className="previewCardHeader">
-              <div className="previewWindowControls" aria-hidden="true">
-                <span className="dot dotRed" />
-                <span className="dot dotYellow" />
-                <span className="dot dotGreen" />
-              </div>
               <div className="previewCardTitle">
-                <FolderGit2 size={14} />
+                <FolderGit2 size={15} />
                 <span>@cgupta21 / Arsenic</span>
                 <span className="previewStatusBadge">Public • Active</span>
               </div>
               <div className="previewLivePill">
-                <span className="pulseIndicator" />
                 <span>Sample analysis</span>
               </div>
             </div>

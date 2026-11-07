@@ -60,7 +60,10 @@ function inProcessFetch(
       const url = `http://127.0.0.1:${port}${path}`
       fetch(url, {
         method: options.method ?? 'GET',
-        headers: options.headers ?? {},
+        headers: {
+          Origin: 'http://127.0.0.1:5173',
+          ...(options.headers ?? {}),
+        },
         body: options.body,
         redirect: options.redirect ?? 'manual',
       })

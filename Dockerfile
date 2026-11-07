@@ -10,9 +10,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-COPY --from=build /app/server ./server
-COPY --from=build /app/shared ./shared
-COPY --from=build /app/client/dist ./client/dist
-COPY --from=build /app/public ./public
+COPY --from=build --chown=node:node /app/server ./server
+COPY --from=build --chown=node:node /app/shared ./shared
+COPY --from=build --chown=node:node /app/client/dist ./client/dist
+COPY --from=build --chown=node:node /app/public ./public
+USER node
 EXPOSE 5000
 CMD ["npm", "start"]

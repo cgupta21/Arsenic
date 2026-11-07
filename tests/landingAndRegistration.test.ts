@@ -19,7 +19,10 @@ function inProcessFetch(
       const url = `http://127.0.0.1:${port}${path}`
       fetch(url, {
         method: options.method ?? 'GET',
-        headers: options.headers ?? {},
+        headers: {
+          Origin: 'http://127.0.0.1:5173',
+          ...(options.headers ?? {}),
+        },
         body: options.body,
       })
         .then(async (r) => {
@@ -66,38 +69,38 @@ describe('Arsenic Landing Page & Registration Flow', () => {
       expect(appCode).toContain('id="primary-navigation"')
     })
 
-    it('contains the specified hero headline: "Understand Any GitHub Repository."', () => {
-      expect(landingCode).toContain('Understand Any')
-      expect(landingCode).toContain('GitHub Repository.')
-      expect(landingCode).toContain('highlightTerracotta')
+    it('contains the specified hero headline: "Analyze GitHub repositories and developer cadence"', () => {
+      expect(landingCode).toContain('Analyze GitHub repositories and')
+      expect(landingCode).toContain('developer cadence')
+      expect(landingCode).toContain('brandAccent')
     })
 
     it('supporting copy explains repository activity, developer velocity, and commit signals', () => {
-      expect(landingCode).toContain('Turn raw repository activity')
-      expect(landingCode).toContain('developer velocity')
-      expect(landingCode).toContain('commit signals into clear')
+      expect(landingCode).toContain('Inspect commit frequency')
+      expect(landingCode).toContain('repository health')
+      expect(landingCode).toContain('contribution velocity')
     })
 
-    it('provides primary "Get Started" and secondary "Try Free Without Login" CTAs in Hero', () => {
+    it('provides primary "Get Started" and secondary "Explore as guest" CTAs in Hero', () => {
       expect(landingCode).toContain('id="hero-get-started-btn"')
       expect(landingCode).toContain('id="hero-try-free-btn"')
-      expect(landingCode).toContain('Try Free Without Login')
+      expect(landingCode).toContain('Explore as guest')
     })
 
     it('includes high-fidelity visual dashboard preview labeled with genuine application signals', () => {
       expect(landingCode).toContain('dashboardPreviewCard')
-      expect(landingCode).toContain('Live Intelligence Preview')
+      expect(landingCode).toContain('Sample analysis')
       expect(landingCode).toContain('@cgupta21 / Arsenic')
-      expect(landingCode).toContain('Demonstrated using genuine application metrics from @cgupta21/Arsenic')
+      expect(landingCode).toContain('Sample analysis based on real metrics from @cgupta21/Arsenic')
     })
 
     it('advertises strictly supported features: Repository Intelligence, Developer Activity Insights, Contribution Analysis, Repository Summaries, Search and Explore', () => {
       const requiredFeatures = [
-        'Repository Intelligence',
-        'Developer Activity Insights',
-        'Contribution Analysis',
-        'Repository Summaries',
-        'Search and Explore',
+        'Repository metrics',
+        'Activity insights',
+        'Contribution analysis',
+        'Summaries',
+        'Search and compare',
       ]
       for (const feat of requiredFeatures) {
         expect(landingCode).toContain(feat)
@@ -106,8 +109,8 @@ describe('Arsenic Landing Page & Registration Flow', () => {
 
     it('implements the 3 How-It-Works steps', () => {
       expect(landingCode).toContain('Find a GitHub user or repository')
-      expect(landingCode).toContain('Analyze available repository information')
-      expect(landingCode).toContain('Explore the resulting insights')
+      expect(landingCode).toContain('Aggregate repository information')
+      expect(landingCode).toContain('Explore developer insights')
     })
 
     it('includes final CTA section with "Get Started" and "Try Free Without Login"', () => {

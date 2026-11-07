@@ -20,7 +20,10 @@ function inProcessFetch(
       const url = `http://127.0.0.1:${port}${path}`
       fetch(url, {
         method: options.method ?? 'GET',
-        headers: options.headers ?? {},
+        headers: {
+          Origin: 'http://127.0.0.1:5173',
+          ...(options.headers ?? {}),
+        },
         body: options.body,
       })
         .then(async (r) => {
@@ -236,10 +239,26 @@ describe('Unauthenticated Guest Search Limit', () => {
     const cookieHeader = `session=${sealedCookie}`
 
     // Dashboard request fails with 404 (nonexistent user)
-    const resDash = await inProcessFetch('/api/dashboard/nonexistent-user-xyz-404-shouldnotexist', {
-      headers: { Cookie: cookieHeader }
+    const originalFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (urlStr.startsWith('https://api.github.com')) {
+        return new Response(JSON.stringify({ message: 'Not Found' }), {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return originalFetch(input, init)
     })
-    expect(resDash.status).toBe(404)
+
+    try {
+      const resDash = await inProcessFetch('/api/dashboard/nonexistent-user-xyz-404-shouldnotexist', {
+        headers: { Cookie: cookieHeader }
+      })
+      expect(resDash.status).toBe(404)
+    } finally {
+      fetchSpy.mockRestore()
+    }
 
     // Check searches remaining: still 2 remaining (not 1)
     const resCheck = await inProcessFetch('/api/search/consume', {

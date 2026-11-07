@@ -53,14 +53,15 @@ const isProd =
   (process.env.VERCEL === '1' && process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development')
 const sessionSecret = resolveSessionSecret(process.env)
 
+const cookieSameSite = (process.env.COOKIE_SAMESITE || 'lax').toLowerCase()
 const sessionOptions = {
   password: sessionSecret,
   cookieName: 'session',
   ttl: 7 * 24 * 60 * 60,
   cookieOptions: {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: isProd
+    sameSite: cookieSameSite === 'none' ? 'none' : 'lax',
+    secure: cookieSameSite === 'none' ? true : isProd
   }
 };
 
@@ -122,6 +123,8 @@ app.use(async (req, res, next) => {
   }
 });
 
+const isDebugMode = !isProd || process.env.DEBUG === 'true' || process.env.DEBUG === '1'
+
 const generalLimiter = rateLimit({
   windowMs: 60_000,
   limit: 90,
@@ -130,6 +133,43 @@ const generalLimiter = rateLimit({
   message: { error: 'Too many requests to Arsenic. Please slow down for a moment.' }
 })
 app.use('/api/', generalLimiter)
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 30,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again later.' }
+})
+app.use('/auth/', authLimiter)
+app.use('/api/auth/', authLimiter)
+
+/** CSRF Origin validation for state-changing requests */
+function verifySameOriginOrAllowed(req, res, next) {
+  if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH' && req.method !== 'DELETE') {
+    return next()
+  }
+  const originHeader = req.get('origin')
+  const refererHeader = req.get('referer')
+
+  let refererOrigin = null
+  if (refererHeader) {
+    try {
+      refererOrigin = new URL(refererHeader).origin
+    } catch {
+      return res.status(403).json({ error: 'Malformed Referer header on state-changing request.' })
+    }
+  }
+
+  const origin = originHeader || refererOrigin
+  if (!origin) {
+    return res.status(403).json({ error: 'Missing Origin or Referer header on state-changing request.' })
+  }
+  if (clientOrigins.includes(origin)) {
+    return next()
+  }
+  return res.status(403).json({ error: 'Forbidden cross-origin request.' })
+}
 
 // Deterministic summaries are local and free, but the endpoint is rate-limited to prevent abuse.
 const summaryLimiter = rateLimit({
@@ -731,7 +771,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
         activeDays: days.filter((day) => day.contributionCount > 0).length,
         currentStreak: streaks.current,
         longestStreak: streaks.longest,
-        privateContributionCount: bundle.contributions?.restrictedContributionsCount || 0
+        privateContributionCount: includePrivate ? (bundle.contributions?.restrictedContributionsCount || 0) : 0
       },
       languages,
       timing,
@@ -750,12 +790,21 @@ async function buildDashboard(username, authToken, includePrivate = false) {
   })
 }
 
-function sessionToken(req) {
-  return req.session?.githubAccessToken || defaultToken
-}
-
 function userCanSeePrivate(req, username) {
   return Boolean(req.session?.githubUser?.login && req.session.githubUser.login.toLowerCase() === username.toLowerCase())
+}
+
+/**
+ * Returns the appropriate GitHub access token.
+ * Security enforcement: The user's OAuth access token is ONLY used when querying
+ * that specific user's own profile. For any other user, the server's defaultToken
+ * is used to prevent cross-user data leakage and rate limit draining.
+ */
+function sessionToken(req, targetUsername = null) {
+  if (targetUsername && userCanSeePrivate(req, targetUsername)) {
+    return req.session?.githubAccessToken || defaultToken
+  }
+  return defaultToken
 }
 
 /** Returns true if the request carries a recognised authenticated session (GitHub or Google). */
@@ -790,7 +839,7 @@ app.get('/api/search-history', (_req, res) => {
 const GUEST_SEARCH_LIMIT = 3
 const FALLBACK_PROFILE = 'cgupta21'
 
-app.post('/api/search/consume', async (req, res) => {
+app.post('/api/search/consume', verifySameOriginOrAllowed, async (req, res) => {
   res.set('Cache-Control', 'no-store')
 
   // Logged-in users (GitHub or Google) have unlimited searches.
@@ -803,7 +852,14 @@ app.post('/api/search/consume', async (req, res) => {
     })
   }
 
-  const requestedUser = req.body?.username ? String(req.body.username).replace(/^@/, '').trim().toLowerCase() : null
+  let requestedUser = null
+  if (req.body?.username) {
+    const rawUser = String(req.body.username).replace(/^@/, '').trim()
+    if (!isValidGitHubUsername(rawUser)) {
+      return res.status(400).json({ error: 'Invalid GitHub username.' })
+    }
+    requestedUser = rawUser.toLowerCase()
+  }
   const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
   const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
 
@@ -865,7 +921,7 @@ app.get('/api/dashboard/:username', async (req, res) => {
   }
   const lowerUser = username.toLowerCase()
   const privateScope = userCanSeePrivate(req, username)
-  const token = sessionToken(req)
+  const token = sessionToken(req, username)
 
   // Enforce guest search limit on the backend
   const isAuth = isAuthenticated(req)
@@ -1016,8 +1072,8 @@ app.get('/api/compare/:left/:right', async (req, res) => {
   }
   try {
     const [leftData, rightData] = await Promise.all([
-      buildDashboard(left, sessionToken(req), userCanSeePrivate(req, left)),
-      buildDashboard(right, sessionToken(req), userCanSeePrivate(req, right))
+      buildDashboard(left, sessionToken(req, left), userCanSeePrivate(req, left)),
+      buildDashboard(right, sessionToken(req, right), userCanSeePrivate(req, right))
     ])
     res.json({ left: leftData, right: rightData })
   } catch (error) {
@@ -1034,7 +1090,7 @@ app.get('/api/compare/:left/:right', async (req, res) => {
   }
 })
 
-app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
+app.post('/api/summary/:username', summaryLimiter, verifySameOriginOrAllowed, async (req, res) => {
   const username = req.params.username.replace(/^@/, '').trim()
   if (!isValidGitHubUsername(username)) {
     return res.status(400).json({ error: 'Invalid GitHub username.' })
@@ -1052,7 +1108,7 @@ app.post('/api/summary/:username', summaryLimiter, async (req, res) => {
   }
 
   try {
-    const data = await buildDashboard(username, sessionToken(req), userCanSeePrivate(req, username))
+    const data = await buildDashboard(username, sessionToken(req, username), userCanSeePrivate(req, username))
     const text = generateDeveloperSummary(data)
     summaryCount += 1
     summaryCache.set(summaryKey, { summary: text, expires: Date.now() + 60 * 60 * 1000 })
@@ -1082,13 +1138,14 @@ function appendSetCookie(res, cookieStr) {
 
 /** Shared helper: set the short-lived signed oauth_state cookie. */
 function setOAuthStateCookie(res, signedState) {
+  const sameSiteValue = sessionOptions.cookieOptions.sameSite === 'none' ? 'None' : 'Lax'
   const cookieParts = [
     `oauth_state=${signedState}`,
     'HttpOnly',
     'Path=/',
     'Max-Age=600',
-    'SameSite=Lax',
-    isProd ? 'Secure' : ''
+    `SameSite=${sameSiteValue}`,
+    sessionOptions.cookieOptions.secure ? 'Secure' : ''
   ].filter(Boolean)
   appendSetCookie(res, cookieParts.join('; '))
 }
@@ -1171,17 +1228,20 @@ async function consumeOAuthState(req, res, returnedState) {
   const cookieSignedState = match ? decodeURIComponent(match[1]) : ''
   const sessionSignedState = req.session?.oauthState || ''
 
-  console.log(`[OAuth Diagnostic] consumeOAuthState: hasCookieState=${!!cookieSignedState}, hasSessionState=${!!sessionSignedState}, hasReturnedState=${!!returnedState}`)
+  if (isDebugMode) {
+    console.log(`[OAuth Diagnostic] consumeOAuthState: hasCookieState=${!!cookieSignedState}, hasSessionState=${!!sessionSignedState}, hasReturnedState=${!!returnedState}`)
+  }
 
   // Clear the cookie immediately (valid or not)
+  const sameSiteValue = sessionOptions.cookieOptions.sameSite === 'none' ? 'None' : 'Lax'
   const clearParts = [
     'oauth_state=',
     'HttpOnly',
     'Path=/',
     'Max-Age=0',
     'Expires=Thu, 01 Jan 1970 00:00:00 GMT',
-    'SameSite=Lax',
-    isProd ? 'Secure' : ''
+    `SameSite=${sameSiteValue}`,
+    sessionOptions.cookieOptions.secure ? 'Secure' : ''
   ].filter(Boolean)
   appendSetCookie(res, clearParts.join('; '))
 
@@ -1207,9 +1267,6 @@ async function consumeOAuthState(req, res, returnedState) {
   for (const candidate of candidates) {
     const dotIndex = candidate.indexOf('.')
     if (dotIndex === -1) {
-      if (candidate === returnedState) {
-        return { ok: true, state: returnedState, frontendOrigin: savedFrontendOrigin }
-      }
       continue
     }
     const originalState = candidate.substring(0, dotIndex)
@@ -1235,10 +1292,12 @@ app.get('/auth/github', async (req, res) => {
   const redirectUri = resolveOAuthCallbackUri(req, 'github')
   const frontendOrigin = resolveFrontendOrigin(req)
   await persistOAuthState(req, res, state, redirectUri, frontendOrigin)
-  try {
-    console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
-  } catch {
-    console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+  if (isDebugMode) {
+    try {
+      console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
+    } catch {
+      console.log(`[OAuth Diagnostic] /auth/github: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+    }
   }
   const params = new URLSearchParams({
     client_id: clientId,
@@ -1252,7 +1311,9 @@ app.get('/auth/github', async (req, res) => {
 app.get('/auth/github/callback', async (req, res) => {
   const { code, state } = req.query
   const verification = await consumeOAuthState(req, res, state)
-  console.log(`[OAuth Diagnostic] /auth/github/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
+  if (isDebugMode) {
+    console.log(`[OAuth Diagnostic] /auth/github/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
+  }
   if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
 
   try {
@@ -1304,10 +1365,12 @@ app.get('/auth/google', async (req, res) => {
   const redirectUri = resolveOAuthCallbackUri(req, 'google')
   const frontendOrigin = resolveFrontendOrigin(req)
   await persistOAuthState(req, res, state, redirectUri, frontendOrigin)
-  try {
-    console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
-  } catch {
-    console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+  if (isDebugMode) {
+    try {
+      console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectHost=${new URL(redirectUri).host}`)
+    } catch {
+      console.log(`[OAuth Diagnostic] /auth/google: hasClientId=${!!clientId}, isProd=${isProd}, redirectUriSet=${!!redirectUri}`)
+    }
   }
   const params = new URLSearchParams({
     client_id: clientId,
@@ -1332,7 +1395,9 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 
   const verification = await consumeOAuthState(req, res, state)
-  console.log(`[OAuth Diagnostic] /auth/google/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
+  if (isDebugMode) {
+    console.log(`[OAuth Diagnostic] /auth/google/callback: hasCode=${!!code}, hasState=${!!state}, hasCookie=${!!req.headers?.cookie}, hasSession=${!!req.session}, stateValid=${verification.ok}`)
+  }
   if (!verification.ok) return res.status(400).send('Invalid OAuth state.')
 
   if (!code || typeof code !== 'string') {
@@ -1394,24 +1459,27 @@ app.get('/auth/google/callback', async (req, res) => {
   }
 })
 
-app.post(['/auth/logout', '/api/auth/logout'], async (req, res) => {
-  console.log(`[LOGOUT DIAGNOSTICS] ${req.method} ${req.url}`)
-  console.log(`[LOGOUT DIAGNOSTICS] req.session exists: ${!!req.session}`)
-  console.log(`[LOGOUT DIAGNOSTICS] req.session.destroy exists: ${!!(req.session && req.session.destroy)}`)
+app.post(['/auth/logout', '/api/auth/logout'], verifySameOriginOrAllowed, async (req, res) => {
+  if (isDebugMode) {
+    console.log(`[LOGOUT DIAGNOSTICS] ${req.method} ${req.url}`)
+    console.log(`[LOGOUT DIAGNOSTICS] req.session exists: ${!!req.session}`)
+    console.log(`[LOGOUT DIAGNOSTICS] req.session.destroy exists: ${!!(req.session && req.session.destroy)}`)
+  }
   try {
     if (req.session && req.session.destroy) {
       await req.session.destroy()
-      console.log('[LOGOUT DIAGNOSTICS] req.session.destroy() succeeded')
+      if (isDebugMode) console.log('[LOGOUT DIAGNOSTICS] req.session.destroy() succeeded')
     } else {
-      console.log('[LOGOUT DIAGNOSTICS] req.session or destroy() missing, proceeding to clear cookie anyway')
+      if (isDebugMode) console.log('[LOGOUT DIAGNOSTICS] req.session or destroy() missing, proceeding to clear cookie anyway')
     }
     // iron-session's destroy() clears the session data but does NOT expire the browser cookie.
     // We must explicitly overwrite the cookie with Max-Age=0 and expired date so the browser removes it.
     // Use the exact same cookie name and attributes as sessionOptions so the browser matches it.
+    const sameSiteValue = sessionOptions.cookieOptions.sameSite === 'none' ? 'None' : 'Lax'
     const clearCookieParts = [
       `${sessionOptions.cookieName}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0`,
       'HttpOnly',
-      `SameSite=${sessionOptions.cookieOptions.sameSite === 'lax' ? 'Lax' : sessionOptions.cookieOptions.sameSite}`,
+      `SameSite=${sameSiteValue}`,
       sessionOptions.cookieOptions.secure ? 'Secure' : ''
     ].filter(Boolean)
     res.setHeader('Set-Cookie', clearCookieParts.join('; '))
@@ -1434,26 +1502,34 @@ if (process.env.VERCEL !== '1') {
     const indexPath = path.join(distPath, 'index.html')
     const match = req.path.match(/^\/u\/([^/]+)/)
     if (match) {
-      const username = decodeURIComponent(match[1]).replace(/^@/, '').trim()
-      const title = `Arsenic — @${username}`
-      const desc = `GitHub developer intelligence, contribution patterns and repository health for @${username} on Arsenic.`
-      const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
+      let rawUser = ''
       try {
-        let content = fs.readFileSync(indexPath, 'utf-8')
-        content = content
-          .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
-          .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)
-          .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${desc}" />`)
-          .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${url}" />`)
-          .replace(/<meta property="og:type" content=".*?" \/>/, `<meta property="og:type" content="profile" />`)
-          .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`)
-          .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${desc}" />`)
-          .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${url}" />`)
-          .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${url}" />`)
-        res.setHeader('Content-Type', 'text/html; charset=utf-8')
-        return res.send(content)
+        rawUser = decodeURIComponent(match[1]).replace(/^@/, '').trim()
       } catch {
-        // Fallback to sendFile if index.html is not yet built
+        rawUser = ''
+      }
+      if (isValidGitHubUsername(rawUser)) {
+        const username = rawUser
+        const title = `Arsenic — @${username}`
+        const desc = `GitHub developer intelligence, contribution patterns and repository health for @${username} on Arsenic.`
+        const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
+        try {
+          let content = fs.readFileSync(indexPath, 'utf-8')
+          content = content
+            .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
+            .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)
+            .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${desc}" />`)
+            .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${url}" />`)
+            .replace(/<meta property="og:type" content=".*?" \/>/, `<meta property="og:type" content="profile" />`)
+            .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`)
+            .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${desc}" />`)
+            .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${url}" />`)
+            .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${url}" />`)
+          res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          return res.send(content)
+        } catch {
+          // Fallback to sendFile if index.html is not yet built
+        }
       }
     }
     res.sendFile(indexPath, (error) => {
@@ -1481,7 +1557,9 @@ export {
   persistOAuthState,
   resolveOAuthCallbackUri,
   resolveFrontendOrigin,
-  resolvePostLoginRedirect
+  resolvePostLoginRedirect,
+  sessionToken,
+  userCanSeePrivate
 }
 export default app
 

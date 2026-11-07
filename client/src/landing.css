@@ -9,32 +9,7 @@
   position: relative;
   width: 100%;
   overflow-x: hidden;
-}
-.landingAmbient {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-  z-index: 0;
-}
-.landingGlow1 {
-  position: absolute;
-  top: -150px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(1000px, 90vw);
-  height: 500px;
-  background: radial-gradient(ellipse at top, rgba(201, 106, 69, 0.15) 0%, rgba(135, 150, 106, 0.05) 50%, transparent 75%);
-  filter: blur(40px);
-}
-.landingGlow2 {
-  position: absolute;
-  top: 800px;
-  right: -100px;
-  width: 500px;
-  height: 500px;
-  background: radial-gradient(circle, rgba(135, 150, 106, 0.09) 0%, transparent 70%);
-  filter: blur(60px);
+  background-color: var(--bg);
 }
 
 /* ── Landing Hero ── */
@@ -43,14 +18,14 @@
   z-index: 1;
   max-width: 1200px;
   margin: 0 auto;
-  padding: 60px 24px 70px;
+  padding: 96px 24px 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
 }
 .landingHeroContent {
-  max-width: 840px;
+  max-width: 800px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -59,8 +34,8 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 14px;
-  border-radius: 9999px;
+  padding: 4px 12px;
+  border-radius: 6px;
   background: rgba(201, 106, 69, 0.08);
   border: 1px solid rgba(201, 106, 69, 0.25);
   font-size: 12px;
@@ -68,16 +43,10 @@
   margin-bottom: 24px;
 }
 .landingBadgeDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--terracotta);
-  box-shadow: 0 0 10px var(--terracotta);
-  animation: pulse-dot 2.5s infinite;
-}
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: .4; transform: scale(.8); }
 }
 .landingBadgeTag {
   font-weight: 700;
@@ -87,93 +56,87 @@
   color: var(--sand);
 }
 .landingHeadline {
-  font-size: clamp(36px, 5.5vw, 64px);
-  font-weight: 800;
-  letter-spacing: -0.035em;
+  font-size: clamp(36px, 4.5vw, 56px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1.1;
   margin: 0 0 20px;
   color: var(--text);
 }
+.brandAccent,
 .highlightTerracotta {
   color: var(--terracotta);
-  background: linear-gradient(135deg, var(--terracotta) 20%, var(--sand) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 .landingSubcopy {
   font-size: clamp(15px, 2vw, 18px);
   line-height: 1.65;
   color: var(--muted);
-  max-width: 680px;
+  max-width: 640px;
   margin: 0 0 32px;
 }
 .landingCtaGroup {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 34px;
+  margin-bottom: 32px;
 }
 .landingCtaPrimary {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 13px 26px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
   background: var(--terracotta);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 10px 28px rgba(201, 106, 69, 0.35);
-  transition: all .2s ease;
+  transition: background-color .15s ease, border-color .15s ease;
   cursor: pointer;
   text-decoration: none;
 }
 .landingCtaPrimary:hover {
-  background: #d47651;
-  transform: translateY(-2px);
-  box-shadow: 0 14px 34px rgba(201, 106, 69, 0.45);
+  background: #b55d3a;
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .landingCtaSecondary {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  padding: 13px 24px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
   font-size: 15px;
   font-weight: 600;
   background: rgba(23, 23, 20, 0.85);
   border: 1px solid var(--border);
   color: var(--sand);
   backdrop-filter: blur(8px);
-  transition: all .2s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
   cursor: pointer;
 }
 .landingCtaSecondary:hover {
   background: var(--card2);
   border-color: var(--sage);
   color: var(--text);
-  transform: translateY(-2px);
 }
 
 /* Quick Search in Hero */
 .landingQuickSearch {
   width: 100%;
-  max-width: 580px;
+  max-width: 560px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .landingSearchInputWrap {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 6px 6px 14px;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 4px 4px 4px 12px;
+  border-radius: 8px;
   background: rgba(23, 23, 20, 0.88);
   border: 1px solid var(--border);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
@@ -201,8 +164,8 @@
   color: #7d8076;
 }
 .landingSearchSubmitBtn {
-  padding: 10px 18px;
-  border-radius: 10px;
+  padding: 8px 16px;
+  border-radius: 6px;
   border: none;
   background: var(--card2);
   color: var(--sand);
@@ -221,7 +184,7 @@
   font-size: 12px;
   color: #ff7676;
   text-align: left;
-  padding-left: 10px;
+  padding-left: 8px;
 }
 .landingSearchSuggestions {
   display: flex;
@@ -230,6 +193,7 @@
   gap: 8px;
   flex-wrap: wrap;
   font-size: 12px;
+  margin-top: 4px;
 }
 .suggestionLabel {
   color: var(--muted);
@@ -239,7 +203,7 @@
   border: 1px solid var(--border);
   color: var(--sand);
   border-radius: 6px;
-  padding: 2px 8px;
+  padding: 4px 8px;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, monospace;
   cursor: pointer;
@@ -262,11 +226,11 @@
 .dashboardPreviewCard {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 16px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
   overflow: hidden;
   text-align: left;
-  transition: transform .25s ease, border-color .25s ease;
+  transition: border-color .15s ease;
 }
 .dashboardPreviewCard:hover {
   border-color: rgba(201, 106, 69, 0.4);
@@ -275,25 +239,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 12px 20px;
   background: var(--card2);
   border-bottom: 1px solid var(--border);
   gap: 12px;
   flex-wrap: wrap;
 }
-.previewWindowControls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.previewWindowControls .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.dotRed { background: #ff5f56; }
-.dotYellow { background: #ffbd2e; }
-.dotGreen { background: #27c93f; }
 .previewCardTitle {
   display: flex;
   align-items: center;
@@ -308,7 +259,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .05em;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 4px;
   background: rgba(135, 150, 106, 0.18);
   color: var(--sage);
@@ -323,15 +274,8 @@
   color: var(--sand);
   background: rgba(229, 211, 179, 0.08);
   border: 1px solid rgba(229, 211, 179, 0.2);
-  padding: 3px 10px;
-  border-radius: 999px;
-}
-.pulseIndicator {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #27c93f;
-  box-shadow: 0 0 8px #27c93f;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 .previewCardBody {
   padding: 24px;
@@ -343,10 +287,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
+  padding: 16px 20px;
   background: rgba(0, 0, 0, 0.25);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   gap: 16px;
   flex-wrap: wrap;
 }
@@ -356,21 +300,23 @@
   gap: 16px;
 }
 .previewScoreValue {
-  font-size: 38px;
-  font-weight: 800;
+  font-size: 36px;
+  font-weight: 600;
   color: var(--sand);
   line-height: 1;
   font-family: Inter, ui-sans-serif, sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 .scoreGrade {
   font-size: 15px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--sage);
 }
 .scoreSubtext {
   font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 .previewScoreTags {
   display: flex;
@@ -381,10 +327,10 @@
 .previewTag {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   font-size: 11px;
   font-weight: 600;
-  padding: 4px 10px;
+  padding: 4px 8px;
   border-radius: 6px;
 }
 .tagSage {
@@ -409,30 +355,30 @@
   gap: 12px;
 }
 .previewMetricItem {
-  padding: 14px 16px;
+  padding: 16px;
   background: var(--card2);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .metricLabel {
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 .metricVal {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text);
   margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 .metricTrend {
   font-size: 11px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .metricTrend.positive {
   color: var(--sage);
@@ -442,7 +388,7 @@
 .previewHeatmapSection {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 .previewSectionLabel {
   display: flex;
@@ -460,15 +406,15 @@
 .previewHeatmapGrid {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
-  gap: 5px;
+  gap: 4px;
   padding: 12px;
   background: rgba(0, 0, 0, 0.22);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 8px;
 }
 .heatmapCell {
   aspect-ratio: 1;
-  border-radius: 3px;
+  border-radius: 2px;
   background: #1d1c18;
 }
 .heatmapCell.lvl-0 { background: #22211c; }
@@ -485,7 +431,7 @@
 .previewLangBar {
   height: 8px;
   width: 100%;
-  border-radius: 999px;
+  border-radius: 4px;
   display: flex;
   overflow: hidden;
   background: #25241f;
@@ -497,19 +443,19 @@
 .previewLangLegend {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 .langLegendItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 11px;
   color: var(--muted);
 }
 .langDot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
 }
 .langDot.ts { background: #3178c6; }
@@ -521,7 +467,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
+  padding: 12px 20px;
   background: var(--card2);
   border-top: 1px solid var(--border);
   gap: 12px;
@@ -549,46 +495,44 @@
 .landingPillars {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 28px 24px;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  gap: 32px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
 }
 .pillarItem {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   text-align: left;
+  position: relative;
+}
+.pillarItem:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -16px;
+  top: 4px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--border);
 }
 .pillarIcon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
   flex-shrink: 0;
 }
-.pillarIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.25);
-}
-.pillarIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.pillarIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
-}
 .pillarText h3 {
-  margin: 0 0 5px;
+  margin: 0 0 4px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text);
 }
 .pillarText p {
@@ -601,29 +545,27 @@
 /* ── Section Header ── */
 .sectionHeader {
   text-align: center;
-  max-width: 720px;
-  margin: 0 auto 50px;
+  max-width: 680px;
+  margin: 0 auto 48px;
 }
 .sectionEyebrow {
   display: inline-block;
   font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: .1em;
+  font-weight: 600;
   color: var(--terracotta);
   margin-bottom: 12px;
 }
 .sectionTitle {
-  font-size: clamp(28px, 4vw, 40px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: clamp(26px, 3.5vw, 36px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
   line-height: 1.2;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: var(--text);
 }
 .sectionSubtitle {
   font-size: 15px;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--muted);
   margin: 0;
 }
@@ -637,61 +579,51 @@
 .featuresGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 22px;
+  gap: 20px;
 }
 .featureCard {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 32px 28px;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   text-align: left;
-  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+  transition: border-color .15s ease;
 }
 .featureCard:hover {
-  transform: translateY(-3px);
-  border-color: rgba(201, 106, 69, 0.35);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  border-color: rgba(201, 106, 69, 0.4);
 }
 .featureCardSpan {
   grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
+  align-items: start;
 }
 .featureCardIcon {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
-  margin-bottom: 20px;
-}
-.featureCardIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.28);
-}
-.featureCardIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.featureCardIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
+  margin-bottom: 16px;
 }
 .featureCardTitle {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 600;
   color: var(--text);
-  margin: 0 0 10px;
-  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  letter-spacing: -0.015em;
 }
 .featureCardDesc {
   font-size: 14px;
   line-height: 1.65;
   color: var(--muted);
-  margin: 0 0 18px;
+  margin: 0 0 16px;
 }
 .featureList {
   list-style: none;
@@ -699,9 +631,9 @@
   margin: auto 0 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  padding-top: 14px;
+  padding-top: 12px;
 }
 .featureList li {
   font-size: 12px;
@@ -730,73 +662,66 @@
 .howStepsGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 22px;
+  gap: 24px;
 }
 .stepCard {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  padding: 30px 24px;
+  border-radius: 16px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   text-align: left;
-  transition: transform .2s ease, border-color .2s ease;
+  transition: border-color .15s ease;
+  position: relative;
 }
 .stepCard:hover {
-  transform: translateY(-2px);
-  border-color: var(--sage);
+  border-color: rgba(242, 236, 225, 0.2);
 }
 .stepHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 .stepNumber {
-  font-size: 28px;
-  font-weight: 800;
-  color: rgba(229, 211, 179, 0.28);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--terracotta);
   font-family: ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+  background: rgba(201, 106, 69, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid rgba(201, 106, 69, 0.25);
 }
 .stepIcon {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--card2);
+  border: 1px solid var(--border);
+  color: var(--sand);
   display: grid;
   place-items: center;
 }
-.stepIcon.terracotta {
-  background: rgba(201, 106, 69, 0.12);
-  color: var(--terracotta);
-  border: 1px solid rgba(201, 106, 69, 0.25);
-}
-.stepIcon.sage {
-  background: rgba(135, 150, 106, 0.14);
-  color: var(--sage);
-  border: 1px solid rgba(135, 150, 106, 0.28);
-}
-.stepIcon.sand {
-  background: rgba(229, 211, 179, 0.12);
-  color: var(--sand);
-  border: 1px solid rgba(229, 211, 179, 0.25);
-}
 .stepTitle {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text);
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   line-height: 1.35;
 }
 .stepDesc {
   font-size: 13px;
   line-height: 1.6;
   color: var(--muted);
-  margin: 0 0 18px;
+  margin: 0 0 16px;
 }
 .stepMiniPreview {
   margin-top: auto;
-  padding: 10px 14px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   background: rgba(0, 0, 0, 0.28);
   border: 1px solid var(--border);
   font-size: 11px;
@@ -810,38 +735,37 @@
 .landingFinalCta {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 40px 24px 90px;
+  padding: 32px 24px 80px;
 }
 .finalCtaCard {
-  background: linear-gradient(135deg, rgba(201, 106, 69, 0.15) 0%, rgba(23, 23, 20, 0.95) 40%, rgba(135, 150, 106, 0.12) 100%);
-  border: 1px solid rgba(201, 106, 69, 0.35);
-  border-radius: 24px;
-  padding: 60px 32px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 56px 32px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 .finalCtaBadge {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--sand);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 4px 12px;
-  border-radius: 999px;
-  margin-bottom: 20px;
+  border-radius: 6px;
+  margin-bottom: 16px;
 }
 .finalCtaTitle {
-  font-size: clamp(26px, 4vw, 38px);
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: clamp(24px, 3.5vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.025em;
   color: var(--text);
-  margin: 0 0 14px;
+  margin: 0 0 12px;
   max-width: 640px;
 }
 .finalCtaSubtext {
@@ -849,52 +773,50 @@
   line-height: 1.6;
   color: var(--muted);
   max-width: 540px;
-  margin: 0 0 32px;
+  margin: 0 0 28px;
 }
 .finalCtaActions {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .finalCtaPrimary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 13px 28px;
+  padding: 12px 24px;
   font-size: 15px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--terracotta);
   color: #fff;
-  border: none;
-  box-shadow: 0 10px 24px rgba(201, 106, 69, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   cursor: pointer;
-  transition: all .15s ease;
+  transition: background-color .15s ease, border-color .15s ease;
 }
 .finalCtaPrimary:hover {
-  background: #d47651;
-  transform: translateY(-2px);
+  background: #b55d3a;
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .finalCtaSecondary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 13px 24px;
+  padding: 12px 20px;
   font-size: 15px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--card2);
   border: 1px solid var(--border);
   color: var(--sand);
   cursor: pointer;
-  transition: all .15s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 .finalCtaSecondary:hover {
   border-color: var(--sage);
   color: var(--text);
-  transform: translateY(-2px);
 }
 
 /* ── Dedicated Registration Page ── */
@@ -1028,7 +950,6 @@
 .continueWithGoogle:hover {
   border-color: var(--sand);
   background: #25241f;
-  transform: translateY(-1px);
 }
 .continueWithGithub {
   background: #201f1b;
@@ -1038,7 +959,6 @@
 .continueWithGithub:hover {
   border-color: var(--terracotta);
   background: #282622;
-  transform: translateY(-1px);
 }
 
 .dividerOr {
@@ -1074,7 +994,6 @@
   background: rgba(229, 211, 179, 0.16);
   border-color: var(--sand);
   color: #fff;
-  transform: translateY(-1px);
 }
 .guestAllowanceNote {
   display: flex;
@@ -1271,7 +1190,7 @@
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 600;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--terracotta);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.15);
@@ -1287,7 +1206,6 @@
 }
 .navGetStartedBtn:hover {
   background: #d47651;
-  transform: translateY(-1px);
 }
 .loginPromptSecondaryActions {
   display: flex;
@@ -1311,6 +1229,21 @@
 .loginPromptHomeBtn:hover {
   border-color: var(--terracotta);
   color: var(--text);
+}
+
+/* ── Keyboard Focus States ── */
+.landingCtaPrimary:focus-visible,
+.landingCtaSecondary:focus-visible,
+.landingSearchInputWrap:focus-within,
+.landingSearchSubmitBtn:focus-visible,
+.suggestionChip:focus-visible,
+.previewExploreBtn:focus-visible,
+.finalCtaPrimary:focus-visible,
+.finalCtaSecondary:focus-visible,
+.navGetStartedBtn:focus-visible,
+.loginPromptHomeBtn:focus-visible {
+  outline: 2px solid var(--terracotta);
+  outline-offset: 2px;
 }
 
 /* ── Responsive Adaptations for Landing & Register ── */
@@ -1337,24 +1270,30 @@
 
 @media (max-width: 768px) {
   .landingHero {
-    padding: 40px 16px 50px;
+    padding: 64px 16px 48px;
   }
   .landingPillars {
     grid-template-columns: 1fr;
     gap: 16px;
-    padding: 30px 16px;
+    padding: 24px 16px;
+  }
+  .pillarItem:not(:last-child)::after {
+    display: none;
+  }
+  .featureCardSpan {
+    grid-template-columns: 1fr;
   }
   .landingFeaturesSection, .landingHowSection {
-    padding: 50px 16px;
+    padding: 48px 16px;
   }
   .landingFinalCta {
-    padding: 30px 16px 60px;
+    padding: 24px 16px 64px;
   }
   .finalCtaCard {
     padding: 40px 20px;
   }
   .registerMainCol {
-    padding: 30px 20px;
+    padding: 28px 20px;
   }
   .previewHeatmapGrid {
     grid-template-columns: repeat(8, 1fr);
@@ -1402,7 +1341,7 @@
 @media (max-width: 360px) {
   .landingBadge {
     font-size: 11px;
-    padding: 4px 10px;
+    padding: 4px 8px;
   }
   .landingHeadline {
     font-size: 26px;
@@ -1412,5 +1351,17 @@
   }
   .previewCardBody {
     padding: 16px;
+  }
+}
+
+/* ── Prefers Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

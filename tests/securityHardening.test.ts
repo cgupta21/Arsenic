@@ -1,11 +1,23 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
+
+const { originalEnvGithubToken, TEST_DEFAULT_GITHUB_TOKEN } = vi.hoisted(() => {
+  const original = process.env.GITHUB_TOKEN
+  const sentinel = 'test-default-github-token'
+  process.env.GITHUB_TOKEN = sentinel
+  return {
+    originalEnvGithubToken: original,
+    TEST_DEFAULT_GITHUB_TOKEN: sentinel,
+  }
+})
+
+import { sealData } from 'iron-session'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { spawnSync } from 'node:child_process'
 // @ts-expect-error – server/index.js is plain JS without declaration files
-import app, { fallbackSessionSecret, isPlaceholderSecret, resolveSessionSecret } from '../server/index.js'
+import app, { fallbackSessionSecret, isPlaceholderSecret, resolveSessionSecret, sessionToken, userCanSeePrivate } from '../server/index.js'
 import { isValidGitHubUsername, validateGitHubUsername } from '../shared/validation.js'
 import { normalizeGithubInput } from '../client/src/lib/normalizeGithubInput.js'
 
@@ -200,6 +212,7 @@ describe('GitHub Username Validation (Regex & Server Boundaries)', () => {
   it('/api/summary/:username returns 400 for invalid usernames', async () => {
     const res = await inProcessFetch('/api/summary/invalid--summary-user', {
       method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:5173' },
     })
     expect(res.status).toBe(400)
     expect(res.json().error).toContain('Invalid GitHub username')
@@ -364,5 +377,484 @@ describe('Production SESSION_SECRET security enforcement', () => {
     )
     expect(result.status).toBe(0)
     expect(result.stdout).toContain('BOOT_OK')
+  })
+
+  describe('Security Hardening — Authorization, Input Validation & CSRF', () => {
+    it('POST /api/search/consume rejects invalid GitHub usernames with 400 when origin is allowed', async () => {
+      const res = await inProcessFetch('/api/search/consume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://127.0.0.1:5173',
+        },
+        body: JSON.stringify({ username: 'invalid--username' }),
+      })
+      expect(res.status).toBe(400)
+      expect(res.json().error).toContain('Invalid GitHub username')
+    })
+
+    it('POST /api/search/consume accepts allowed origin and valid body', async () => {
+      const res = await inProcessFetch('/api/search/consume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://127.0.0.1:5173',
+        },
+        body: JSON.stringify({ username: 'torvalds' }),
+      })
+      expect(res.status).toBe(200)
+      expect(res.json().allowed).toBe(true)
+    })
+
+    it('POST endpoints reject requests missing both Origin and Referer with 403', async () => {
+      const endpoints = ['/api/search/consume', '/auth/logout', '/api/summary/torvalds']
+      for (const endpoint of endpoints) {
+        const res = await inProcessFetch(endpoint, {
+          method: 'POST',
+          headers: {},
+        })
+        expect(res.status).toBe(403)
+        expect(res.json().error).toContain('Missing Origin or Referer header')
+      }
+    })
+
+    it('POST endpoints reject requests with malformed Referer with controlled 403 without 500 crashes', async () => {
+      const endpoints = ['/api/search/consume', '/auth/logout', '/api/summary/torvalds']
+      const malformedReferers = ['not-a-valid-url', ':::invalid-scheme', 'ht!tp://bad']
+      for (const endpoint of endpoints) {
+        for (const malformed of malformedReferers) {
+          const res = await inProcessFetch(endpoint, {
+            method: 'POST',
+            headers: {
+              Referer: malformed,
+            },
+          })
+          expect(res.status).toBe(403)
+          expect(res.json().error).toContain('Malformed Referer header')
+        }
+      }
+    })
+
+    it('POST endpoints accept valid Referer matching allowed client origins', async () => {
+      const res = await inProcessFetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          Referer: 'http://127.0.0.1:5173/dashboard',
+        },
+      })
+      expect(res.status).toBe(200)
+      expect(res.json().ok).toBe(true)
+    })
+
+    it('POST /auth/logout handles valid Origin with absent or empty session cleanly', async () => {
+      const res = await inProcessFetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          Origin: 'http://127.0.0.1:5173',
+        },
+      })
+      expect(res.status).toBe(200)
+      expect(res.json().ok).toBe(true)
+    })
+
+    it('POST /api/search/consume handles valid Origin with absent session by applying guest quota', async () => {
+      const res = await inProcessFetch('/api/search/consume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://127.0.0.1:5173',
+        },
+        body: JSON.stringify({ username: 'torvalds' }),
+      })
+      expect(res.status).toBe(200)
+      expect(res.json().authenticated).toBe(false)
+      expect(res.json().allowed).toBe(true)
+    })
+
+    it('POST /api/search/consume rejects cross-origin requests from untrusted origins', async () => {
+      const res = await inProcessFetch('/api/search/consume', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://evil-attacker-site.com',
+        },
+        body: JSON.stringify({ username: 'torvalds' }),
+      })
+      expect(res.status).toBe(403)
+      expect(res.json().error).toMatch(/Origin not allowed|Forbidden cross-origin/i)
+    })
+
+    it('POST /api/summary/:username rejects cross-origin requests from untrusted origins', async () => {
+      const res = await inProcessFetch('/api/summary/torvalds', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://evil-attacker-site.com',
+        },
+      })
+      expect(res.status).toBe(403)
+      expect(res.json().error).toMatch(/Origin not allowed|Forbidden cross-origin/i)
+    })
+
+    it('POST /auth/logout rejects cross-origin requests from untrusted origins', async () => {
+      const res = await inProcessFetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          Origin: 'https://evil-attacker-site.com',
+        },
+      })
+      expect(res.status).toBe(403)
+      expect(res.json().error).toMatch(/Origin not allowed|Forbidden cross-origin/i)
+    })
+
+    it('userCanSeePrivate only returns true when session user matches target username exactly (case-insensitive)', () => {
+      const aliceReq = { session: { githubUser: { login: 'Alice' } } }
+      expect(userCanSeePrivate(aliceReq, 'Alice')).toBe(true)
+      expect(userCanSeePrivate(aliceReq, 'alice')).toBe(true)
+      expect(userCanSeePrivate(aliceReq, 'Bob')).toBe(false)
+      expect(userCanSeePrivate(aliceReq, 'mallory')).toBe(false)
+      expect(userCanSeePrivate({}, 'Alice')).toBe(false)
+      expect(userCanSeePrivate({ session: {} }, 'Alice')).toBe(false)
+    })
+
+    it('sessionToken strictly scopes user OAuth token to their own profile and NEVER to another user', () => {
+      const aliceToken = 'ghu_alice_personal_oauth_token'
+      const aliceReq = {
+        session: {
+          githubAccessToken: aliceToken,
+          githubUser: { login: 'Alice' },
+        },
+      }
+
+      // Alice requesting her own profile gets her personal token
+      expect(sessionToken(aliceReq, 'Alice')).toBe(aliceToken)
+      expect(sessionToken(aliceReq, 'alice')).toBe(aliceToken)
+
+      // Alice requesting Bob or any other user receives the server defaultToken, NOT Alice's token
+      expect(sessionToken(aliceReq, 'Bob')).not.toBe(aliceToken)
+      expect(sessionToken(aliceReq, 'mallory')).not.toBe(aliceToken)
+      expect(sessionToken(aliceReq, null)).not.toBe(aliceToken)
+    })
+  })
+
+  describe('Cross-User Authorization & Token Isolation Integration Tests (Mocked Upstream)', () => {
+    afterAll(() => {
+      if (originalEnvGithubToken !== undefined) {
+        process.env.GITHUB_TOKEN = originalEnvGithubToken
+      } else {
+        delete process.env.GITHUB_TOKEN
+      }
+    })
+
+    async function createAuthenticatedSessionCookie(login: string, accessToken: string) {
+      const secret = resolveSessionSecret(process.env)
+      const sealed = await sealData(
+        {
+          githubUser: { login, name: `${login} Display Name`, avatar_url: `https://avatars.githubusercontent.com/${login}` },
+          githubAccessToken: accessToken,
+        },
+        { password: secret, ttl: 7 * 24 * 3600 }
+      )
+      return `session=${sealed}`
+    }
+
+    /**
+     * Intercepts upstream GitHub API calls whether dispatched as fetch(url, { headers })
+     * or fetch(new Request(url, { headers })), capturing url, normalized headers, and body.
+     */
+    function setupMockGitHubUpstream(
+      recordRequest: (url: string, headers: Record<string, string>, bodyObj: Record<string, unknown> | null) => void
+    ) {
+      const originalFetch = globalThis.fetch
+      return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+        let urlStr = ''
+        const hdrs: Record<string, string> = {}
+        let bodyStr: string | null = null
+
+        // 1. Extract URL, headers, and body from Request instance if input is a Request
+        if (typeof Request !== 'undefined' && input instanceof Request) {
+          urlStr = input.url
+          input.headers.forEach((v, k) => {
+            hdrs[k.toLowerCase()] = v
+          })
+          try {
+            bodyStr = await input.clone().text()
+          } catch {
+            bodyStr = null
+          }
+        } else if (typeof input === 'string') {
+          urlStr = input
+        } else if (input instanceof URL) {
+          urlStr = input.toString()
+        } else if (input && typeof (input as { url?: string }).url === 'string') {
+          urlStr = (input as { url: string }).url
+        }
+
+        // 2. Overlay init.headers if provided (init takes precedence over Request object headers in standard fetch)
+        if (init?.headers) {
+          if (typeof Headers !== 'undefined' && init.headers instanceof Headers) {
+            init.headers.forEach((v, k) => {
+              hdrs[k.toLowerCase()] = v
+            })
+          } else if (Array.isArray(init.headers)) {
+            init.headers.forEach(([k, v]) => {
+              hdrs[k.toLowerCase()] = v
+            })
+          } else {
+            Object.entries(init.headers).forEach(([k, v]) => {
+              hdrs[k.toLowerCase()] = String(v)
+            })
+          }
+        }
+
+        // 3. Overlay init.body if provided
+        if (typeof init?.body === 'string') {
+          bodyStr = init.body
+        }
+
+        if (urlStr.startsWith('https://api.github.com')) {
+          let parsedBody: Record<string, unknown> | null = null
+          if (bodyStr) {
+            try {
+              parsedBody = JSON.parse(bodyStr) as Record<string, unknown>
+            } catch {
+              parsedBody = null
+            }
+          }
+          recordRequest(urlStr, hdrs, parsedBody)
+
+          if (urlStr.includes('/graphql')) {
+            const login = (parsedBody?.variables as Record<string, string> | undefined)?.login || 'mockuser'
+            const mockGraphQLPayload = {
+              data: {
+                user: {
+                  login,
+                  name: `${login} Name`,
+                  avatarUrl: `https://avatars.githubusercontent.com/${login}`,
+                  bio: 'Mock developer bio',
+                  url: `https://github.com/${login}`,
+                  location: 'Earth',
+                  websiteUrl: 'https://example.com',
+                  createdAt: '2020-01-01T00:00:00Z',
+                  followers: { totalCount: 15 },
+                  following: { totalCount: 8 },
+                  repositories: {
+                    totalCount: 1,
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: [
+                      {
+                        id: `repo_${login}`,
+                        name: `repo-${login}`,
+                        url: `https://github.com/${login}/repo-${login}`,
+                        description: 'Test repository',
+                        stargazerCount: 12,
+                        forkCount: 3,
+                        isFork: false,
+                        isArchived: false,
+                        updatedAt: '2026-01-01T00:00:00Z',
+                        pushedAt: '2026-01-01T00:00:00Z',
+                        primaryLanguage: { name: 'TypeScript', color: '#3178c6' },
+                        languages: { edges: [] },
+                        issues: { totalCount: 0 },
+                      },
+                    ],
+                  },
+                  contributionsCollection: {
+                    restrictedContributionsCount: 42,
+                    totalPullRequestContributions: 10,
+                    totalIssueContributions: 5,
+                    totalPullRequestReviewContributions: 2,
+                    contributionCalendar: {
+                      totalContributions: 150,
+                      weeks: [
+                        {
+                          contributionDays: [{ date: '2026-01-01', contributionCount: 5 }],
+                        },
+                      ],
+                    },
+                  },
+                },
+                rateLimit: { remaining: 4999, resetAt: '2026-11-08T00:00:00Z' },
+              },
+            }
+            return new Response(JSON.stringify(mockGraphQLPayload), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json', 'x-ratelimit-remaining': '4999' },
+            })
+          }
+
+          // Return empty list for REST calls (events, commit timing)
+          return new Response(JSON.stringify([]), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', 'x-ratelimit-remaining': '4999' },
+          })
+        }
+
+        // Only local loopback test server requests pass through to original fetch
+        return originalFetch(input, init)
+      })
+    }
+
+    it('1. Alice requests Bob dashboard: Alice token is NEVER used, defaultToken is used, and privateContributionCount is 0', async () => {
+      process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      // Use guaranteed unique usernames to ensure fresh execution without cache collisions
+      const uid = `t1-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+      const aliceLogin = `alice-${uid}`
+      const bobLogin = `bob-${uid}`
+      const aliceToken = 'ghu_alice_private_oauth_token_secret999'
+      const aliceCookie = await createAuthenticatedSessionCookie(aliceLogin, aliceToken)
+
+      const recordedRequests: Array<{ url: string; headers: Record<string, string>; login?: string }> = []
+      const fetchSpy = setupMockGitHubUpstream((url, headers, bodyObj) => {
+        recordedRequests.push({
+          url,
+          headers,
+          login: (bodyObj?.variables as Record<string, string> | undefined)?.login,
+        })
+      })
+
+      try {
+        const res = await inProcessFetch(`/api/dashboard/${bobLogin}`, {
+          headers: {
+            Cookie: aliceCookie,
+          },
+        })
+
+        expect(res.status).toBe(200)
+        const data = res.json() as {
+          user: { login: string }
+          contributions: { privateContributionCount: number }
+          privateContributions: boolean
+        }
+        expect(data.user.login).toBe(bobLogin)
+
+        // Verify private contribution data is strictly 0 and privateContributions is false
+        expect(data.contributions.privateContributionCount).toBe(0)
+        expect(data.privateContributions).toBe(false)
+
+        // Verify that Bob GraphQL request actually occurred (not skipped due to cache)
+        const bobGraphqlCall = recordedRequests.find((r) => r.url.includes('/graphql') && r.login === bobLogin)
+        expect(bobGraphqlCall).toBeDefined()
+
+        // Explicitly verify Alice's token is never used
+        expect(bobGraphqlCall?.headers.authorization || '').not.toContain(aliceToken)
+
+        // Explicitly verify that Bob's GraphQL request uses exactly the test-default-github-token
+        expect(bobGraphqlCall?.headers.authorization).toBe(`Bearer ${TEST_DEFAULT_GITHUB_TOKEN}`)
+        expect(bobGraphqlCall?.headers.authorization).toBe('Bearer test-default-github-token')
+
+        // Verify across all recorded upstream requests that Alice's token was never leaked
+        for (const req of recordedRequests) {
+          const authHeader = req.headers.authorization || ''
+          expect(authHeader).not.toContain(aliceToken)
+        }
+      } finally {
+        fetchSpy.mockRestore()
+        process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      }
+    })
+
+    it('2. Alice requests her own dashboard: Alice token IS used, and private contribution count is returned', async () => {
+      process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      const uid = `t2-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+      const aliceLogin = `alice-${uid}`
+      const aliceToken = 'ghu_alice_owner_oauth_token_secret888'
+      const aliceCookie = await createAuthenticatedSessionCookie(aliceLogin, aliceToken)
+
+      const recordedRequests: Array<{ url: string; headers: Record<string, string>; login?: string }> = []
+      const fetchSpy = setupMockGitHubUpstream((url, headers, bodyObj) => {
+        recordedRequests.push({
+          url,
+          headers,
+          login: (bodyObj?.variables as Record<string, string> | undefined)?.login,
+        })
+      })
+
+      try {
+        const res = await inProcessFetch(`/api/dashboard/${aliceLogin}`, {
+          headers: {
+            Cookie: aliceCookie,
+          },
+        })
+
+        expect(res.status).toBe(200)
+        const data = res.json() as {
+          user: { login: string }
+          contributions: { privateContributionCount: number }
+          privateContributions: boolean
+        }
+        expect(data.user.login).toBe(aliceLogin)
+
+        // Verify private contribution data IS authorized and returned
+        expect(data.contributions.privateContributionCount).toBe(42)
+        expect(data.privateContributions).toBe(true)
+
+        // Verify upstream token selection: Alice's personal token was used for her own query
+        const aliceGraphqlCall = recordedRequests.find((r) => r.url.includes('/graphql') && r.login === aliceLogin)
+        expect(aliceGraphqlCall).toBeDefined()
+        expect(aliceGraphqlCall?.headers.authorization).toBe(`Bearer ${aliceToken}`)
+      } finally {
+        fetchSpy.mockRestore()
+        process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      }
+    })
+
+    it('3. Compare endpoint: /api/compare/alice/bob scopes Alice token only to Alice and isolates Bob', async () => {
+      process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      const uid = `t3-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+      const aliceLogin = `alice-${uid}`
+      const bobLogin = `bob-${uid}`
+      const aliceToken = 'ghu_alice_compare_oauth_token_secret777'
+      const aliceCookie = await createAuthenticatedSessionCookie(aliceLogin, aliceToken)
+
+      const recordedRequests: Array<{ url: string; headers: Record<string, string>; login?: string }> = []
+      const fetchSpy = setupMockGitHubUpstream((url, headers, bodyObj) => {
+        recordedRequests.push({
+          url,
+          headers,
+          login: (bodyObj?.variables as Record<string, string> | undefined)?.login,
+        })
+      })
+
+      try {
+        const res = await inProcessFetch(`/api/compare/${aliceLogin}/${bobLogin}`, {
+          headers: {
+            Cookie: aliceCookie,
+          },
+        })
+
+        expect(res.status).toBe(200)
+        const data = res.json() as {
+          left: { user: { login: string }; contributions: { privateContributionCount: number }; privateContributions: boolean }
+          right: { user: { login: string }; contributions: { privateContributionCount: number }; privateContributions: boolean }
+        }
+
+        // Left side (Alice): authorized, includes private data and Alice's session token
+        expect(data.left.user.login).toBe(aliceLogin)
+        expect(data.left.contributions.privateContributionCount).toBe(42)
+        expect(data.left.privateContributions).toBe(true)
+
+        // Right side (Bob): strictly public, zero private data
+        expect(data.right.user.login).toBe(bobLogin)
+        expect(data.right.contributions.privateContributionCount).toBe(0)
+        expect(data.right.privateContributions).toBe(false)
+
+        // Check token usage for both upstream calls
+        const aliceCall = recordedRequests.find((r) => r.url.includes('/graphql') && r.login === aliceLogin)
+        const bobCall = recordedRequests.find((r) => r.url.includes('/graphql') && r.login === bobLogin)
+
+        expect(aliceCall).toBeDefined()
+        expect(aliceCall?.headers.authorization).toBe(`Bearer ${aliceToken}`)
+
+        expect(bobCall).toBeDefined()
+        expect(bobCall?.headers.authorization || '').not.toContain(aliceToken)
+
+        // Verify Bob's compare-side GraphQL request uses exactly the sentinel token: Bearer test-default-github-token
+        expect(bobCall?.headers.authorization).toBe(`Bearer ${TEST_DEFAULT_GITHUB_TOKEN}`)
+        expect(bobCall?.headers.authorization).toBe('Bearer test-default-github-token')
+      } finally {
+        fetchSpy.mockRestore()
+        process.env.GITHUB_TOKEN = TEST_DEFAULT_GITHUB_TOKEN
+      }
+    })
   })
 })

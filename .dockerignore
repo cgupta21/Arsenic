@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.git
+.github
+.agent
+node_modules
+coverage
+tests
+*.log
+.DS_Store
+.vscode

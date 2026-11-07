@@ -154,18 +154,18 @@ export function LandingPage({
               {/* Top Score Strip */}
               <div className="previewScoreStrip">
                 <div className="previewScoreMain">
-                  <div className="previewScoreValue">94</div>
+                  <div className="previewScoreValue">92</div>
                   <div className="previewScoreMeta">
-                    <div className="scoreGrade">Excellent Health</div>
-                    <div className="scoreSubtext">Consistency 96% • Activity 92% • Cadence 94%</div>
+                    <div className="scoreGrade">Strong health</div>
+                    <div className="scoreSubtext">Consistency 94 • Collaboration 89 • Impact 92</div>
                   </div>
                 </div>
                 <div className="previewScoreTags">
                   <span className="previewTag tagSage">
-                    <CheckCircle2 size={12} /> High Velocity
+                    <CheckCircle2 size={12} /> Consistent commits
                   </span>
                   <span className="previewTag tagSand">
-                    <GitBranch size={12} /> Clean Branching
+                    <GitBranch size={12} /> Regular PR reviews
                   </span>
                 </div>
               </div>
@@ -173,70 +173,72 @@ export function LandingPage({
               {/* Metric Cards Row */}
               <div className="previewMetricsGrid">
                 <div className="previewMetricItem">
-                  <span className="metricLabel">Commits & PRs</span>
-                  <span className="metricVal">1,840+</span>
-                  <span className="metricTrend positive">+14% vs avg</span>
+                  <span className="metricLabel">Total contributions</span>
+                  <span className="metricVal">1,842</span>
+                  <span className="metricTrend positive">457 PRs & commits</span>
                 </div>
                 <div className="previewMetricItem">
-                  <span className="metricLabel">Active Streak</span>
-                  <span className="metricVal">42 Days</span>
-                  <span className="metricTrend">Longest: 68d</span>
+                  <span className="metricLabel">Active streak</span>
+                  <span className="metricVal">42 days</span>
+                  <span className="metricTrend">Longest: 68 days</span>
                 </div>
                 <div className="previewMetricItem">
-                  <span className="metricLabel">PR Velocity</span>
-                  <span className="metricVal">4.8 / wk</span>
-                  <span className="metricTrend positive">Top 5%</span>
+                  <span className="metricLabel">Active days</span>
+                  <span className="metricVal">284 / 365</span>
+                  <span className="metricTrend positive">78% consistency</span>
                 </div>
                 <div className="previewMetricItem">
-                  <span className="metricLabel">Tracked Repos</span>
-                  <span className="metricVal">24</span>
-                  <span className="metricTrend">84 Stars</span>
+                  <span className="metricLabel">Tracked repositories</span>
+                  <span className="metricVal">24 repos</span>
+                  <span className="metricTrend">84 stars earned</span>
                 </div>
               </div>
 
               {/* Visual Heatmap Mockup */}
               <div className="previewHeatmapSection">
                 <div className="previewSectionLabel">
-                  <span>Contribution Timing & Density</span>
+                  <span>Contribution timing & density</span>
                   <span className="heatmapLegendNote">Last 16 weeks</span>
                 </div>
                 <div className="previewHeatmapGrid" aria-hidden="true">
-                  {Array.from({ length: 64 }).map((_, i) => {
-                    const intensities = ['lvl-0', 'lvl-1', 'lvl-2', 'lvl-3', 'lvl-4']
-                    // Deterministic pattern so preview is consistent
-                    const intensity = intensities[(i * 7 + 3) % intensities.length]
-                    return <div key={i} className={`heatmapCell ${intensity}`} />
-                  })}
+                  {[
+                    1, 2, 3, 0, 2, 3, 2, 1, 3, 4, 2, 0, 1, 2, 3, 2,
+                    2, 3, 1, 0, 3, 2, 4, 1, 2, 3, 3, 0, 1, 2, 2, 1,
+                    3, 4, 3, 0, 2, 3, 2, 1, 1, 2, 4, 0, 3, 3, 2, 1,
+                    2, 3, 1, 0, 2, 4, 3, 1, 3, 2, 2, 0, 1, 3, 2, 1
+                  ].map((lvl, i) => (
+                    <div key={i} className={`heatmapCell lvl-${lvl}`} />
+                  ))}
                 </div>
               </div>
 
               {/* Language Distribution & Architecture Takeaway */}
               <div className="previewSummaryRow">
                 <div className="previewLangBar">
-                  <div className="langSegment ts" style={{ width: '56%' }} title="TypeScript 56%" />
-                  <div className="langSegment js" style={{ width: '24%' }} title="JavaScript 24%" />
-                  <div className="langSegment css" style={{ width: '12%' }} title="CSS 12%" />
-                  <div className="langSegment html" style={{ width: '8%' }} title="HTML 8%" />
+                  <div className="langSegment ts" style={{ width: '58%' }} title="TypeScript 58%" />
+                  <div className="langSegment css" style={{ width: '22%' }} title="CSS 22%" />
+                  <div className="langSegment js" style={{ width: '14%' }} title="JavaScript 14%" />
+                  <div className="langSegment html" style={{ width: '6%' }} title="HTML 6%" />
                 </div>
                 <div className="previewLangLegend">
-                  <span className="langLegendItem"><span className="langDot ts" /> TypeScript (56%)</span>
-                  <span className="langLegendItem"><span className="langDot js" /> JavaScript (24%)</span>
-                  <span className="langLegendItem"><span className="langDot css" /> CSS (12%)</span>
-                  <span className="langLegendItem"><span className="langDot html" /> HTML (8%)</span>
+                  <span className="langLegendItem"><span className="langDot ts" /> TypeScript (58%)</span>
+                  <span className="langLegendItem"><span className="langDot css" /> CSS (22%)</span>
+                  <span className="langLegendItem"><span className="langDot js" /> JavaScript (14%)</span>
+                  <span className="langLegendItem"><span className="langDot html" /> HTML (6%)</span>
                 </div>
               </div>
             </div>
 
             <div className="previewCardFooter">
               <span className="previewCaption">
-                Demonstrated using genuine application metrics from @cgupta21/Arsenic
+                Sample analysis based on real metrics from @cgupta21/Arsenic
               </span>
               <button
                 type="button"
                 className="previewExploreBtn"
                 onClick={() => onSearch('cgupta21')}
               >
-                Inspect Live Dashboard →
+                Inspect live dashboard →
               </button>
             </div>
           </div>
@@ -443,7 +445,7 @@ export function LandingPage({
               Inspect velocity scorecards, timing habits, active streaks, AI summaries, or compare multiple developers side-by-side.
             </p>
             <div className="stepMiniPreview">
-              <span className="tagTerracotta">Health: 94 / 100 • 42d Streak</span>
+              <span className="tagTerracotta">Health: 92 / 100 • 42d Streak</span>
             </div>
           </div>
         </div>

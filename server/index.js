@@ -761,6 +761,19 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       }
     })
 
+    const rawRestricted = bundle.contributions?.restrictedContributionsCount
+    const hasRestrictedCount = typeof rawRestricted === 'number'
+    const privateContributionCount = includePrivate && hasRestrictedCount ? rawRestricted : 0
+
+    let privateContributionsStatus = 'unavailable'
+    if (includePrivate) {
+      if (hasRestrictedCount && rawRestricted > 0) {
+        privateContributionsStatus = 'included'
+      } else {
+        privateContributionsStatus = 'zero_or_hidden'
+      }
+    }
+
     return {
       user,
       repos: repoHealth,
@@ -771,7 +784,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
         activeDays: days.filter((day) => day.contributionCount > 0).length,
         currentStreak: streaks.current,
         longestStreak: streaks.longest,
-        privateContributionCount: includePrivate ? (bundle.contributions?.restrictedContributionsCount || 0) : 0
+        privateContributionCount
       },
       languages,
       timing,
@@ -779,6 +792,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       authenticated: Boolean(authToken),
       estimated: Boolean(bundle.estimated),
       privateContributions: Boolean(includePrivate),
+      privateContributionsStatus,
       api: {
         cached: false,
         cacheTtlSeconds: TTL / 1000,
@@ -790,8 +804,24 @@ async function buildDashboard(username, authToken, includePrivate = false) {
   })
 }
 
-function userCanSeePrivate(req, username) {
+/** Parses the granted scope string returned by GitHub into an array of lowercase scopes. */
+function parseGrantedScopes(scopeHeader) {
+  if (typeof scopeHeader !== 'string') return []
+  return scopeHeader
+    .split(/[,\s]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function isSelfUser(req, username) {
   return Boolean(req.session?.githubUser?.login && req.session.githubUser.login.toLowerCase() === username.toLowerCase())
+}
+
+function userCanSeePrivate(req, username) {
+  if (!isSelfUser(req, username)) return false
+  // Explicitly disallow private contribution analytics if the session lacks the read:user scope
+  if (req.session?.hasPrivateContributionsScope === false) return false
+  return true
 }
 
 /**
@@ -801,7 +831,7 @@ function userCanSeePrivate(req, username) {
  * is used to prevent cross-user data leakage and rate limit draining.
  */
 function sessionToken(req, targetUsername = null) {
-  if (targetUsername && userCanSeePrivate(req, targetUsername)) {
+  if (targetUsername && isSelfUser(req, targetUsername)) {
     return req.session?.githubAccessToken || defaultToken
   }
   return defaultToken
@@ -830,7 +860,10 @@ app.get('/api/me', (req, res) => {
   const provider = user
     ? (req.session?.githubUser ? 'github' : 'google')
     : null
-  res.json({ user, provider })
+  const hasPrivateContributionsScope = req.session?.githubUser
+    ? (req.session.hasPrivateContributionsScope !== false)
+    : false
+  res.json({ user, provider, hasPrivateContributionsScope })
 })
 
 app.get('/api/search-history', (_req, res) => {
@@ -1302,7 +1335,7 @@ app.get('/auth/github', async (req, res) => {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: 'read:user user:email',
+    scope: 'read:user',
     state
   })
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
@@ -1331,11 +1364,19 @@ app.get('/auth/github/callback', async (req, res) => {
     const tokenBody = await tokenResponse.json()
     if (!tokenBody.access_token) return res.status(502).send(tokenBody.error_description || 'GitHub OAuth failed.')
 
+    const grantedScopes = parseGrantedScopes(tokenBody.scope)
+    const hasPrivateContributionsScope = grantedScopes.includes('read:user')
+
     const userResponse = await fetch('https://api.github.com/user', { headers: headersFor(tokenBody.access_token) })
     const user = await userResponse.json()
     req.session.githubAccessToken = tokenBody.access_token
     req.session.githubUser = { login: user.login, name: user.name, avatar_url: user.avatar_url }
+    req.session.hasPrivateContributionsScope = hasPrivateContributionsScope
+    req.session.githubScopes = grantedScopes
     await req.session.save()
+    if (isDebugMode) {
+      console.log(`[OAuth Diagnostic] /auth/github/callback: user=${user.login}, hasPrivateScope=${hasPrivateContributionsScope}, scopeCount=${grantedScopes.length}`)
+    }
     const targetOrigin = verification.frontendOrigin || resolveFrontendOrigin(req)
     res.redirect(`${targetOrigin}/dashboard`)
   } catch (error) {
@@ -1559,7 +1600,9 @@ export {
   resolveFrontendOrigin,
   resolvePostLoginRedirect,
   sessionToken,
-  userCanSeePrivate
+  userCanSeePrivate,
+  parseGrantedScopes,
+  isSelfUser
 }
 export default app
 

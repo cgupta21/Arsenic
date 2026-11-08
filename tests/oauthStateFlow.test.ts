@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net'
 import crypto from 'node:crypto'
 import { sealData } from 'iron-session'
 // @ts-expect-error – server/index.js is plain JS without declaration files
-import app, { resolveSessionSecret, fallbackSessionSecret, consumeOAuthState, resolveOAuthCallbackUri, resolveFrontendOrigin, resolvePostLoginRedirect } from '../server/index.js'
+import app, { resolveSessionSecret, fallbackSessionSecret, consumeOAuthState, resolveOAuthCallbackUri, resolveFrontendOrigin, resolvePostLoginRedirect, parseGrantedScopes, userCanSeePrivate, isSelfUser, sessionToken } from '../server/index.js'
 
 const SESSION_PASSWORD = resolveSessionSecret(process.env)
 
@@ -214,12 +214,29 @@ describe('GitHub OAuth Flow — Initiation and Callback', () => {
     expect(loc).toContain('github.com/login/oauth/authorize')
     expect(loc).toContain('client_id=test-github-client-id')
     expect(loc).toContain('state=')
+    expect(loc).toContain('scope=read%3Auser')
+    expect(loc).not.toContain('repo')
+    expect(loc).not.toContain('user%3Aemail')
 
     const setCookie = String(res.headers['set-cookie'] || '')
     expect(setCookie).toContain('oauth_state=')
     expect(setCookie).toContain('Path=/')
     expect(setCookie.toLowerCase()).toContain('httponly')
     expect(setCookie.toLowerCase()).toContain('samesite=lax')
+  })
+
+  it('GET /auth/github strictly requests least-privilege read:user scope and excludes repo permissions', async () => {
+    process.env.GITHUB_CLIENT_ID = 'test-github-client-id'
+    process.env.GITHUB_CLIENT_SECRET = 'test-github-client-secret'
+
+    const res = await inProcessFetch('/auth/github')
+    expect(res.status).toBe(302)
+
+    const loc = new URL(String(res.headers.location || ''))
+    const requestedScope = loc.searchParams.get('scope')
+    expect(requestedScope).toBe('read:user')
+    expect(requestedScope).not.toContain('repo')
+    expect(requestedScope).not.toContain('user:email')
   })
 
   it('GET /auth/github/callback rejects missing state with 400', async () => {
@@ -312,14 +329,30 @@ describe('Google OAuth Flow — Initiation and Callback with Dual Persistence', 
     const signedState = generateSignedState(state)
     const sessionCookie = await createSessionWithOAuthState(signedState)
 
-    // Token exchange mock failing with expected 502 confirms state validation PASSED
-    const res = await inProcessFetch(`/auth/google/callback?code=mock_code&state=${state}`, {
-      headers: { Cookie: sessionCookie },
+    const origFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as { url?: string })?.url || ''
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return new Response(JSON.stringify({ error: 'invalid_client' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
     })
 
-    // Status 502 means state passed and it attempted token exchange
-    expect(res.status).toBe(502)
-    expect(res.text()).toContain('Google OAuth token exchange failed')
+    try {
+      // Token exchange mock failing with expected 502 confirms state validation PASSED
+      const res = await inProcessFetch(`/auth/google/callback?code=mock_code&state=${state}`, {
+        headers: { Cookie: sessionCookie },
+      })
+
+      // Status 502 means state passed and it attempted token exchange
+      expect(res.status).toBe(502)
+      expect(res.text()).toContain('Google OAuth token exchange failed')
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 
   it('Full simulated flow: /auth/google -> capture cookies -> /auth/google/callback', async () => {
@@ -337,13 +370,29 @@ describe('Google OAuth Flow — Initiation and Callback with Dual Persistence', 
     const rawSetCookie = initRes.headers['set-cookie']
     const cookieHeader = Array.isArray(rawSetCookie) ? rawSetCookie.join('; ') : String(rawSetCookie)
 
-    const callbackRes = await inProcessFetch(`/auth/google/callback?code=mock_code&state=${state}`, {
-      headers: { Cookie: cookieHeader },
+    const origFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as { url?: string })?.url || ''
+      if (url.includes('oauth2.googleapis.com/token')) {
+        return new Response(JSON.stringify({ error: 'invalid_client' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
     })
 
-    // Status 502 confirms state validation succeeded
-    expect(callbackRes.status).toBe(502)
-    expect(callbackRes.text()).not.toContain('Invalid OAuth state.')
+    try {
+      const callbackRes = await inProcessFetch(`/auth/google/callback?code=mock_code&state=${state}`, {
+        headers: { Cookie: cookieHeader },
+      })
+
+      // Status 502 confirms state validation succeeded
+      expect(callbackRes.status).toBe(502)
+      expect(callbackRes.text()).not.toContain('Invalid OAuth state.')
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 })
 
@@ -571,6 +620,403 @@ describe('Post-Login Redirect & Authenticated Dashboard State Regression Tests',
     const body = meRes.json()
     expect(body.provider).toBe('google')
     expect((body.user as Record<string, unknown>).login).toBe('ada@example.com')
+  })
+})
+
+describe('GitHub OAuth Scope Validation & Private Contribution Capability', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.GITHUB_CLIENT_ID
+    delete process.env.GITHUB_CLIENT_SECRET
+  })
+
+  it('parseGrantedScopes safely handles various formats and edge cases', () => {
+    expect(parseGrantedScopes('read:user')).toEqual(['read:user'])
+    expect(parseGrantedScopes('read:user,user:email')).toEqual(['read:user', 'user:email'])
+    expect(parseGrantedScopes('read:user repo')).toEqual(['read:user', 'repo'])
+    expect(parseGrantedScopes('')).toEqual([])
+    expect(parseGrantedScopes(null)).toEqual([])
+    expect(parseGrantedScopes(undefined)).toEqual([])
+    expect(parseGrantedScopes('   ')).toEqual([])
+    expect(parseGrantedScopes('READ:USER, User:Email')).toEqual(['read:user', 'user:email'])
+  })
+
+  it('successful token exchange with read:user grants private contribution capability', async () => {
+    process.env.GITHUB_CLIENT_ID = 'test-github-client-id'
+    process.env.GITHUB_CLIENT_SECRET = 'test-github-client-secret'
+
+    const state = crypto.randomBytes(24).toString('hex')
+    const signedState = crypto.createHmac('sha256', SESSION_PASSWORD).update(state).digest('hex')
+    const sealed = await sealData(
+      { oauthState: `${state}.${signedState}` },
+      { password: SESSION_PASSWORD, ttl: 600 }
+    )
+    const sessionCookie = `session=${sealed}`
+
+    const origFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = String(input)
+      if (url.includes('github.com/login/oauth/access_token')) {
+        return new Response(JSON.stringify({ access_token: 'gho_valid_read_user', scope: 'read:user' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('api.github.com/user')) {
+        return new Response(
+          JSON.stringify({ login: 'alice', name: 'Alice Dev', avatar_url: 'https://avatars.githubusercontent.com/u/1' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
+    })
+
+    const res = await inProcessFetch(`/auth/github/callback?code=valid_code&state=${state}`, {
+      headers: { Cookie: sessionCookie },
+    })
+
+    expect(res.status).toBe(302)
+    const setCookies = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'] : [String(res.headers['set-cookie'] || '')]
+    const sessionCookies = setCookies.filter((c: string) => c.startsWith('session='))
+    const latestSession = sessionCookies[sessionCookies.length - 1]?.split(';')[0] || ''
+    expect(latestSession).toContain('session=')
+
+    // Verify /api/me reflects hasPrivateContributionsScope: true
+    const meRes = await inProcessFetch('/api/me', {
+      headers: { Cookie: latestSession },
+    })
+    expect(meRes.status).toBe(200)
+    expect(meRes.json().hasPrivateContributionsScope).toBe(true)
+    expect(meRes.json().user).toEqual(expect.objectContaining({ login: 'alice' }))
+  })
+
+  it('token exchange with missing or insufficient scope permits login but disables private contribution capability', async () => {
+    process.env.GITHUB_CLIENT_ID = 'test-github-client-id'
+    process.env.GITHUB_CLIENT_SECRET = 'test-github-client-secret'
+
+    const state = crypto.randomBytes(24).toString('hex')
+    const signedState = crypto.createHmac('sha256', SESSION_PASSWORD).update(state).digest('hex')
+    const sealed = await sealData(
+      { oauthState: `${state}.${signedState}` },
+      { password: SESSION_PASSWORD, ttl: 600 }
+    )
+    const sessionCookie = `session=${sealed}`
+
+    const origFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = String(input)
+      if (url.includes('github.com/login/oauth/access_token')) {
+        // Insufficient scope: only public_repo or empty string
+        return new Response(JSON.stringify({ access_token: 'gho_unscoped', scope: 'public_repo' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      if (url.includes('api.github.com/user')) {
+        return new Response(
+          JSON.stringify({ login: 'bob', name: 'Bob Dev', avatar_url: 'https://avatars.githubusercontent.com/u/2' }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
+    })
+
+    const res = await inProcessFetch(`/auth/github/callback?code=valid_code&state=${state}`, {
+      headers: { Cookie: sessionCookie },
+    })
+
+    expect(res.status).toBe(302)
+    const setCookies = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'] : [String(res.headers['set-cookie'] || '')]
+    const sessionCookies = setCookies.filter((c: string) => c.startsWith('session='))
+    const latestSession = sessionCookies[sessionCookies.length - 1]?.split(';')[0] || ''
+    expect(latestSession).toContain('session=')
+
+    // Verify /api/me permits login but hasPrivateContributionsScope is false
+    const meRes = await inProcessFetch('/api/me', {
+      headers: { Cookie: latestSession },
+    })
+    expect(meRes.status).toBe(200)
+    expect(meRes.json().hasPrivateContributionsScope).toBe(false)
+    expect(meRes.json().user).toEqual(expect.objectContaining({ login: 'bob' }))
+  })
+
+  it('userCanSeePrivate returns false when hasPrivateContributionsScope is explicitly false', () => {
+    const sessionWithoutScope = {
+      session: {
+        githubUser: { login: 'alice' },
+        githubAccessToken: 'gho_no_scope',
+        hasPrivateContributionsScope: false
+      }
+    }
+    expect(userCanSeePrivate(sessionWithoutScope, 'alice')).toBe(false)
+
+    const sessionWithScope = {
+      session: {
+        githubUser: { login: 'alice' },
+        githubAccessToken: 'gho_with_scope',
+        hasPrivateContributionsScope: true
+      }
+    }
+    expect(userCanSeePrivate(sessionWithScope, 'alice')).toBe(true)
+    expect(userCanSeePrivate(sessionWithScope, 'bob')).toBe(false)
+  })
+
+  it('isSelfUser checks case-insensitive username match correctly', () => {
+    expect(isSelfUser({ session: { githubUser: { login: 'Alice' } } }, 'alice')).toBe(true)
+    expect(isSelfUser({ session: { githubUser: { login: 'Alice' } } }, 'Bob')).toBe(false)
+    expect(isSelfUser({}, 'alice')).toBe(false)
+  })
+
+  it('sessionToken preserves user token for self queries even when scope is insufficient, but isolates for other users', () => {
+    const aliceToken = 'gho_alice_token'
+    const session = {
+      session: {
+        githubUser: { login: 'alice' },
+        githubAccessToken: aliceToken,
+        hasPrivateContributionsScope: false
+      }
+    }
+    expect(sessionToken(session, 'alice')).toBe(aliceToken)
+    expect(sessionToken(session, 'bob')).not.toBe(aliceToken)
+  })
+
+  it('parseGrantedScopes rejects malformed scopes and requires exact read:user identifier', () => {
+    expect(parseGrantedScopes('read_user').includes('read:user')).toBe(false)
+    expect(parseGrantedScopes('read:user:extended').includes('read:user')).toBe(false)
+    expect(parseGrantedScopes('user').includes('read:user')).toBe(false)
+    expect(parseGrantedScopes('read:org').includes('read:user')).toBe(false)
+    expect(parseGrantedScopes(',,,,').includes('read:user')).toBe(false)
+    expect(parseGrantedScopes('   read:user   ').includes('read:user')).toBe(true)
+    expect(parseGrantedScopes('repo,read:user,gist').includes('read:user')).toBe(true)
+  })
+
+  it('dashboard endpoint returns accurate private contribution status: included for positive counts, zero_or_hidden for zero', async () => {
+    const sealedPositive = await sealData(
+      {
+        githubUser: { login: 'alice' },
+        githubAccessToken: 'gho_alice_token',
+        hasPrivateContributionsScope: true
+      },
+      { password: SESSION_PASSWORD, ttl: 600 }
+    )
+
+    const origFetch = globalThis.fetch
+    // 1. Positive private contribution count
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = String(input)
+      if (url.includes('api.github.com/graphql')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: {
+                login: 'alice',
+                name: 'Alice',
+                avatarUrl: 'https://example.com/avatar.png',
+                bio: 'Engineer',
+                url: 'https://github.com/alice',
+                location: null,
+                websiteUrl: null,
+                createdAt: '2020-01-01T00:00:00Z',
+                followers: { totalCount: 10 },
+                following: { totalCount: 5 },
+                repositories: {
+                  totalCount: 1,
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [
+                    {
+                      id: 'r1',
+                      name: 'demo-repo',
+                      url: 'https://github.com/alice/demo-repo',
+                      description: 'Demo',
+                      stargazerCount: 5,
+                      forkCount: 1,
+                      updatedAt: '2026-11-01T00:00:00Z',
+                      pushedAt: '2026-11-01T00:00:00Z',
+                      isFork: false,
+                      isArchived: false,
+                      primaryLanguage: { name: 'TypeScript', color: '#3178c6' },
+                      issues: { totalCount: 0 },
+                      languages: { edges: [] }
+                    }
+                  ]
+                },
+                contributionsCollection: {
+                  totalCommitContributions: 50,
+                  totalPullRequestContributions: 5,
+                  totalIssueContributions: 2,
+                  totalPullRequestReviewContributions: 3,
+                  restrictedContributionsCount: 15,
+                  contributionCalendar: {
+                    totalContributions: 75,
+                    weeks: []
+                  }
+                }
+              },
+              rateLimit: { limit: 5000, remaining: 4999, used: 1, resetAt: '2026-11-08T06:00:00Z', cost: 1 }
+            }
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
+    })
+
+    const resPositive = await inProcessFetch('/api/dashboard/alice', {
+      headers: { Cookie: `session=${sealedPositive}` }
+    })
+    expect(resPositive.status).toBe(200)
+    const dataPositive = resPositive.json() as Record<string, unknown>
+    expect(dataPositive.privateContributions).toBe(true)
+    expect(dataPositive.privateContributionsStatus).toBe('included')
+    expect((dataPositive.contributions as Record<string, unknown>).privateContributionCount).toBe(15)
+
+    // 2. Zero private contributions (status becomes 'zero_or_hidden' without asserting visibility setting is off)
+    const sealedZero = await sealData(
+      {
+        githubUser: { login: 'alicezero' },
+        githubAccessToken: 'gho_alice_zero_token',
+        hasPrivateContributionsScope: true
+      },
+      { password: SESSION_PASSWORD, ttl: 600 }
+    )
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = String(input)
+      if (url.includes('api.github.com/graphql')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: {
+                login: 'alicezero',
+                name: 'Alice Zero',
+                avatarUrl: 'https://example.com/avatar.png',
+                bio: 'Engineer',
+                url: 'https://github.com/alicezero',
+                location: null,
+                websiteUrl: null,
+                createdAt: '2020-01-01T00:00:00Z',
+                followers: { totalCount: 10 },
+                following: { totalCount: 5 },
+                repositories: {
+                  totalCount: 1,
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: []
+                },
+                contributionsCollection: {
+                  totalCommitContributions: 50,
+                  totalPullRequestContributions: 5,
+                  totalIssueContributions: 2,
+                  totalPullRequestReviewContributions: 3,
+                  restrictedContributionsCount: 0,
+                  contributionCalendar: {
+                    totalContributions: 60,
+                    weeks: []
+                  }
+                }
+              },
+              rateLimit: { limit: 5000, remaining: 4999, used: 1, resetAt: '2026-11-08T06:00:00Z', cost: 1 }
+            }
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
+    })
+
+    const resZero = await inProcessFetch('/api/dashboard/alicezero', {
+      headers: { Cookie: `session=${sealedZero}` }
+    })
+    expect(resZero.status).toBe(200)
+    const dataZero = resZero.json() as Record<string, unknown>
+    expect(dataZero.privateContributions).toBe(true)
+    expect(dataZero.privateContributionsStatus).toBe('zero_or_hidden')
+    expect((dataZero.contributions as Record<string, unknown>).privateContributionCount).toBe(0)
+  })
+
+  it('public profile analysis continues working normally when private contribution analytics are unavailable', async () => {
+    const sealedNoScope = await sealData(
+      {
+        githubUser: { login: 'bob' },
+        githubAccessToken: 'gho_bob_no_scope_token',
+        hasPrivateContributionsScope: false
+      },
+      { password: SESSION_PASSWORD, ttl: 600 }
+    )
+
+    const origFetch = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: unknown, init?: unknown) => {
+      const url = String(input)
+      if (url.includes('api.github.com/graphql')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user: {
+                login: 'bob',
+                name: 'Bob',
+                avatarUrl: 'https://example.com/bob.png',
+                bio: 'Developer',
+                url: 'https://github.com/bob',
+                location: null,
+                websiteUrl: null,
+                createdAt: '2021-01-01T00:00:00Z',
+                followers: { totalCount: 2 },
+                following: { totalCount: 1 },
+                repositories: {
+                  totalCount: 1,
+                  pageInfo: { hasNextPage: false, endCursor: null },
+                  nodes: [
+                    {
+                      id: 'r2',
+                      name: 'public-tool',
+                      url: 'https://github.com/bob/public-tool',
+                      description: 'A tool',
+                      stargazerCount: 10,
+                      forkCount: 2,
+                      updatedAt: '2026-11-01T00:00:00Z',
+                      pushedAt: '2026-11-01T00:00:00Z',
+                      isFork: false,
+                      isArchived: false,
+                      primaryLanguage: { name: 'JavaScript', color: '#f1e05a' },
+                      issues: { totalCount: 0 },
+                      languages: { edges: [] }
+                    }
+                  ]
+                },
+                contributionsCollection: {
+                  totalCommitContributions: 10,
+                  totalPullRequestContributions: 1,
+                  totalIssueContributions: 0,
+                  totalPullRequestReviewContributions: 0,
+                  restrictedContributionsCount: 99,
+                  contributionCalendar: {
+                    totalContributions: 11,
+                    weeks: []
+                  }
+                }
+              },
+              rateLimit: { limit: 5000, remaining: 4999, used: 1, resetAt: '2026-11-08T06:00:00Z', cost: 1 }
+            }
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input as RequestInfo, init as RequestInit)
+    })
+
+    const res = await inProcessFetch('/api/dashboard/bob', {
+      headers: { Cookie: `session=${sealedNoScope}` }
+    })
+    expect(res.status).toBe(200)
+    const data = res.json() as Record<string, unknown>
+    // Private contributions must be false and count 0 because hasPrivateContributionsScope is false
+    expect(data.privateContributions).toBe(false)
+    expect(data.privateContributionsStatus).toBe('unavailable')
+    expect((data.contributions as Record<string, unknown>).privateContributionCount).toBe(0)
+    // Public profile data must remain intact and fully functional
+    expect((data.user as Record<string, unknown>).login).toBe('bob')
+    expect(Array.isArray(data.repos)).toBe(true)
+    expect((data.repos as unknown[]).length).toBe(1)
+    expect((data.score as Record<string, unknown>).score).toBeDefined()
   })
 })
 

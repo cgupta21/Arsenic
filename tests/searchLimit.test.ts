@@ -224,10 +224,25 @@ describe('Unauthenticated Guest Search Limit', () => {
     expect(res.json().authError).toBe(true)
 
     // Fallback profile 'cgupta21' is exempt
-    const resFallback = await inProcessFetch('/api/dashboard/cgupta21', {
-      headers: { Cookie: cookieHeader }
+    const origFetch = globalThis.fetch
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (urlStr.includes('api.github.com')) {
+        return new Response(JSON.stringify({ login: 'cgupta21', id: 1, public_repos: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return origFetch(input, init)
     })
-    expect(resFallback.status).not.toBe(401)
+    try {
+      const resFallback = await inProcessFetch('/api/dashboard/cgupta21', {
+        headers: { Cookie: cookieHeader }
+      })
+      expect(resFallback.status).not.toBe(401)
+    } finally {
+      fetchSpy.mockRestore()
+    }
   })
 
   it('failed requests (404 user not found) do not consume a free search', async () => {

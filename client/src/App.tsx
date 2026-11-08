@@ -18,6 +18,7 @@ import { CompareView } from './components/CompareView'
 import { LandingPage } from './components/LandingPage'
 import { RegisterPage } from './components/RegisterPage'
 import { DeveloperIntelligenceOverview } from './components/DeveloperIntelligenceOverview'
+import { PrivacyPolicy, TermsOfService, CookiePolicy } from './components/legal'
 
 const fallbackUser = 'cgupta21'
 
@@ -35,6 +36,15 @@ function GoogleIcon() {
 
 function routeState() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
+  if (path === '/privacy') {
+    return { mode: 'privacy' as const, username: '', left: '', right: '' }
+  }
+  if (path === '/terms') {
+    return { mode: 'terms' as const, username: '', left: '', right: '' }
+  }
+  if (path === '/cookies') {
+    return { mode: 'cookies' as const, username: '', left: '', right: '' }
+  }
   if (path === '/register') {
     return { mode: 'register' as const, username: '', left: '', right: '' }
   }
@@ -134,9 +144,15 @@ export default function App() {
         ? 'Arsenic — Start Exploring GitHub Intelligence'
         : route.mode === 'compare'
           ? 'Arsenic — Compare Developers'
-          : route.username
-            ? `Arsenic — @${route.username}`
-            : 'Arsenic — Developer Intelligence'
+          : route.mode === 'privacy'
+            ? 'Privacy Policy — Arsenic'
+            : route.mode === 'terms'
+              ? 'Terms of Service — Arsenic'
+              : route.mode === 'cookies'
+                ? 'Cookie Policy — Arsenic'
+                : route.username
+                  ? `Arsenic — @${route.username}`
+                  : 'Arsenic — Developer Intelligence'
     document.title = title
 
     const desc = route.mode === 'landing'
@@ -145,9 +161,15 @@ export default function App() {
         ? 'Create your Arsenic account or continue with GitHub or Google for unlimited repository intelligence.'
         : route.mode === 'compare'
           ? 'Compare GitHub developers head-to-head across streaks, collaboration and repository health.'
-          : route.username
-            ? `GitHub developer intelligence, contribution patterns and repository health for @${route.username} on Arsenic.`
-            : 'Arsenic — GitHub developer intelligence, contribution patterns and repository health.'
+          : route.mode === 'privacy'
+            ? 'Arsenic Privacy Policy: Learn how we process public GitHub information, handle OAuth sessions, and protect your privacy.'
+            : route.mode === 'terms'
+              ? 'Arsenic Terms of Service: Free developer analytics, acceptable use, disclaimers, and service terms.'
+              : route.mode === 'cookies'
+                ? 'Arsenic Cookie Policy: Transparent inventory of essential first-party cookies and browser local storage.'
+                : route.username
+                  ? `GitHub developer intelligence, contribution patterns and repository health for @${route.username} on Arsenic.`
+                  : 'Arsenic — GitHub developer intelligence, contribution patterns and repository health.'
 
     const url = route.mode === 'landing'
       ? 'https://arsenic-rho.vercel.app/'
@@ -155,9 +177,15 @@ export default function App() {
         ? 'https://arsenic-rho.vercel.app/register'
         : route.mode === 'compare'
           ? 'https://arsenic-rho.vercel.app/compare'
-          : route.username
-            ? `https://arsenic-rho.vercel.app/u/${encodeURIComponent(route.username)}`
-            : 'https://arsenic-rho.vercel.app/'
+          : route.mode === 'privacy'
+            ? 'https://arsenic-rho.vercel.app/privacy'
+            : route.mode === 'terms'
+              ? 'https://arsenic-rho.vercel.app/terms'
+              : route.mode === 'cookies'
+                ? 'https://arsenic-rho.vercel.app/cookies'
+                : route.username
+                  ? `https://arsenic-rho.vercel.app/u/${encodeURIComponent(route.username)}`
+                  : 'https://arsenic-rho.vercel.app/'
 
     const setMeta = (attr: string, key: string, content: string) => {
       let el = document.querySelector(`meta[${attr}="${key}"]`)
@@ -331,6 +359,9 @@ export default function App() {
 
   return (
     <div className='app dark'>
+      <a href="#main-content" className="skipToContent">
+        Skip to main content
+      </a>
       <header className="topbar" ref={headerRef}>
         <button
           type="button"
@@ -601,7 +632,7 @@ export default function App() {
       {menu && <div className="navBackdrop mobileOnly" onClick={() => setMenu(false)} aria-hidden="true" />}
 
       {route.mode === 'landing' ? (
-        <main>
+        <main id="main-content">
           <LandingPage
             onGetStarted={() => {
               pushRoute('/register')
@@ -641,7 +672,7 @@ export default function App() {
           />
         </main>
       ) : route.mode === 'register' ? (
-        <main>
+        <main id="main-content">
           <RegisterPage
             onBackToHome={() => {
               pushRoute('/')
@@ -659,7 +690,46 @@ export default function App() {
           />
         </main>
       ) : route.mode === 'compare' ? (
-        <main><CompareView initialLeft={route.left} initialRight={route.right} /></main>
+        <main id="main-content"><CompareView initialLeft={route.left} initialRight={route.right} /></main>
+      ) : route.mode === 'privacy' ? (
+        <main id="main-content">
+          <PrivacyPolicy
+            onBackToHome={() => {
+              pushRoute('/')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onNavigateTo={(nextRoute) => {
+              pushRoute(nextRoute)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          />
+        </main>
+      ) : route.mode === 'terms' ? (
+        <main id="main-content">
+          <TermsOfService
+            onBackToHome={() => {
+              pushRoute('/')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onNavigateTo={(nextRoute) => {
+              pushRoute(nextRoute)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          />
+        </main>
+      ) : route.mode === 'cookies' ? (
+        <main id="main-content">
+          <CookiePolicy
+            onBackToHome={() => {
+              pushRoute('/')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onNavigateTo={(nextRoute) => {
+              pushRoute(nextRoute)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          />
+        </main>
       ) : (
         <DashboardView
           username={route.username}
@@ -810,7 +880,7 @@ function DashboardView({
 
   return (
     <>
-      <main>
+      <main id="main-content">
         <section className="hero">
           <div className="heroCopy">
             <div className="eyebrow"><span className="pulseDot" /> GITHUB DEVELOPER INTELLIGENCE</div>
@@ -989,7 +1059,29 @@ function DashboardContent({
         </div>
       )}
       {!data.authenticated && !data.estimated && <div className="notice"><LogIn size={16} /> Public API mode: activity is estimated from GitHub's public events feed (about the last 90 days). Add <code>GITHUB_TOKEN</code> on the server for the full contribution calendar and exact language volume.</div>}
-      {data.api.graphqlRemaining !== null && <div className="rateBar"><span>GitHub GraphQL remaining: <b>{data.api.graphqlRemaining}</b></span><span>Cache: {Math.round(data.api.cacheTtlSeconds / 60)} min</span>{privateForSelf && <span>Private contribution counts enabled</span>}</div>}
+      {data.api.graphqlRemaining !== null && (
+        <div className="rateBar">
+          <span>GitHub GraphQL remaining: <b>{data.api.graphqlRemaining}</b></span>
+          <span>Cache: {Math.round(data.api.cacheTtlSeconds / 60)} min</span>
+          {privateForSelf && (
+            data.privateContributions ? (
+              data.contributions.privateContributionCount > 0 ? (
+                <span title="Aggregate private contribution count supplied by GitHub for your account. Arsenic does not access private repositories or code.">
+                  Private contribution data included (+{compactNumber(data.contributions.privateContributionCount)})
+                </span>
+              ) : (
+                <span title="No private contribution aggregates were returned by GitHub. This could mean either that no private contributions occurred during the selected period, or that GitHub is not sharing private contribution aggregates due to account visibility settings. Arsenic cannot determine which is the case.">
+                  No private contribution aggregates returned.
+                </span>
+              )
+            ) : (
+              <span title="The read:user OAuth scope was not granted. Private contribution aggregates are unavailable.">
+                Private contribution data unavailable (read:user permission missing)
+              </span>
+            )
+          )}
+        </div>
+      )}
 
       <section id="overview" className="overviewSection" aria-label="Developer Overview">
         <div className="profileCard">
@@ -1160,8 +1252,8 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
           <div className="privacySection">
             <h4>Requested OAuth Scopes</h4>
             <div className="scopeItem">
-              <code>read:user, user:email (GitHub)</code>
-              <span>Read-only access to your public profile (avatar, username, display name) and verified email for session authentication.</span>
+              <code>read:user (GitHub)</code>
+              <span>Read-only access to your public profile identity (avatar, username, display name) for session authentication and elevated API rate limits. When permitted by your GitHub profile settings, it enables GitHub to return aggregate private/internal contribution counts for self-analysis. Arsenic never accesses private repository names, source code, commits, issues, pull requests, or other private repository contents.</span>
             </div>
             <div className="scopeItem">
               <code>openid, email, profile (Google)</code>
@@ -1173,8 +1265,8 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
             <h4>What Arsenic Uses Permissions For</h4>
             <ul>
               <li><strong>Higher API rate limits (GitHub only):</strong> GitHub sign-in lifts API capacity from 60 req/hr (guest) to 5,000 req/hr. Google sign-in uses the shared server token.</li>
-              <li><strong>Self-analytics (GitHub only):</strong> GitHub sign-in permits including your own private contribution counts on your dashboard. Google sign-in removes the guest search limit but does not grant access to private GitHub contributions.</li>
-              <li><strong>Zero write operations:</strong> Arsenic requests strictly read-only scopes. It cannot create repositories, commit code, push changes, or alter account settings.</li>
+              <li><strong>Self-analytics (GitHub only):</strong> Permits GitHub to supply aggregate private/internal contribution counts on your personal dashboard if enabled in your GitHub profile settings. Private contribution counts are not guaranteed if your GitHub profile visibility is restricted. Arsenic does not read private repository code, issues, or commits.</li>
+              <li><strong>Zero write operations:</strong> Arsenic requests strictly read-only scopes (<code>read:user</code>). It does not request repository permissions (no <code>repo</code> scope), does not request private email access (no <code>user:email</code> scope), cannot view private code or repositories, and cannot create repositories, commit code, push changes, or alter account settings.</li>
             </ul>
           </div>
 
@@ -1189,12 +1281,24 @@ function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void })
           </div>
 
           <div className="privacySection">
-            <h4>Third-Party Sharing</h4>
+            <h4>Third-Party Sharing &amp; Contact</h4>
             <p>Arsenic never sells, shares, or transmits user data to third parties, advertising networks, or external telemetry platforms. Authentication takes place directly through official GitHub or Google authorization endpoints.</p>
+            <p>For privacy inquiries, contact: <a href="mailto:arsenic.helpdesk@gmail.com">arsenic.helpdesk@gmail.com</a></p>
           </div>
         </div>
 
         <div className="privacyFooter">
+          <button
+            type="button"
+            className="outlineBtn"
+            onClick={() => {
+              onClose()
+              pushRoute('/privacy')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            View Full Privacy Policy →
+          </button>
           <button type="button" className="primaryBtn" onClick={onClose}>Understood</button>
         </div>
       </div>
@@ -1227,7 +1331,41 @@ function Footer({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
               Documentation ↗
             </a>
             <button type="button" className="footerTextLink" onClick={onOpenPrivacy}>
-              <ShieldCheck size={14} /> OAuth & Privacy
+              <ShieldCheck size={14} /> OAuth Transparency
+            </button>
+          </div>
+
+          <div className="footerCol">
+            <span className="footerColTitle">Legal</span>
+            <button
+              type="button"
+              className="footerTextLink"
+              onClick={() => {
+                pushRoute('/privacy')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              Privacy Policy
+            </button>
+            <button
+              type="button"
+              className="footerTextLink"
+              onClick={() => {
+                pushRoute('/terms')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              Terms of Service
+            </button>
+            <button
+              type="button"
+              className="footerTextLink"
+              onClick={() => {
+                pushRoute('/cookies')
+                window.scrollTo({ top: 0, behavior: 'smooth' })
+              }}
+            >
+              Cookie Policy
             </button>
           </div>
 
@@ -1261,8 +1399,9 @@ function Footer({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
       </div>
 
       <div className="footerBottom">
-        <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">Chandan Kumar Gupta</a>.</span>
-        <span className="footerTagline">Independent GitHub analytics · Not affiliated with GitHub, Inc.</span>
+        <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">@cgupta21</a>.</span>
+        <span className="footerTagline">Independent GitHub analytics · Not affiliated with GitHub, Inc. or Google LLC.</span>
+        <span className="footerContact">Contact: <a href="mailto:arsenic.helpdesk@gmail.com">arsenic.helpdesk@gmail.com</a></span>
       </div>
     </footer>
   )

@@ -37,11 +37,10 @@ Arsenic uses [iron-session](https://github.com/vvo/iron-session) for stateless, 
 Arsenic supports optional GitHub authentication to enable higher API rate limits and access authenticated GraphQL calendar telemetry.
 
 ### Read-Only Scopes
-Arsenic requests only:
+Arsenic strictly enforces least-privilege authorization and requests only:
 - `read:user`
-- `user:email`
 
-Zero write scopes, repository administration, or workflow permissions are requested.
+Zero repository permissions (no `repo` scope), zero write scopes, and zero private email scopes (`user:email`) are requested. Arsenic analyzes only public repositories and metadata.
 
 ### Flow Overview
 1. **Initiation (`GET /auth/github`):**

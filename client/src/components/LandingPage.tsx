@@ -88,8 +88,12 @@ export function LandingPage({
           {/* Quick Search Bar directly in Hero */}
           <form className="landingQuickSearch" onSubmit={handleHeroSubmit} role="search" aria-label="Repository search">
             <div className="landingSearchInputWrap">
+              <label htmlFor="landing-search-input" className="srOnly">
+                GitHub username or repository handle
+              </label>
               <Search size={18} className="landingSearchIcon" aria-hidden="true" />
               <input
+                id="landing-search-input"
                 type="text"
                 value={heroSearchInput}
                 onChange={(e) => {
@@ -442,7 +446,7 @@ export function LandingPage({
             </div>
             <h3 className="stepTitle">Explore developer insights</h3>
             <p className="stepDesc">
-              Inspect velocity scorecards, timing habits, active streaks, AI summaries, or compare multiple developers side-by-side.
+              Inspect velocity scorecards, timing habits, active streaks, automated summaries, or compare multiple developers side-by-side.
             </p>
             <div className="stepMiniPreview">
               <span className="tagTerracotta">Health: 92 / 100 • 42d Streak</span>

@@ -41,7 +41,7 @@
 ## Table of Contents
 
 1. [Problem Statement](#problem-statement)
-2. [Interface Previews](#interface-previews)
+2. [Screenshots](#screenshots)
 3. [Verified Features & Capabilities](#verified-features--capabilities)
    - [Developer Intelligence Overview](#1-developer-intelligence-overview)
    - [Deterministic Scoring Engine](#2-deterministic-scoring-engine)
@@ -83,11 +83,11 @@ Standard GitHub profiles highlight pinned repositories and basic contribution gr
 
 ---
 
-## Interface Previews
+## Screenshots
 
-All previews below are genuine captures from Arsenic's running application:
+Genuine captures from Arsenic's deployed production interface (1440 × 900 desktop viewport):
 
-### Landing Page (Desktop)
+### Landing Page
 <p align="center">
   <img src="docs/screenshots/landing-page.png" alt="Arsenic Desktop Landing Page" width="100%" />
 </p>
@@ -97,18 +97,9 @@ All previews below are genuine captures from Arsenic's running application:
   <img src="docs/screenshots/dashboard-overview.png" alt="Developer Intelligence Dashboard Overview" width="100%" />
 </p>
 
-### Side-by-Side Comparison & Contribution Heatmap
+### Side-by-Side Developer Comparison
 <p align="center">
-  <img src="docs/screenshots/developer-comparison.png" alt="Side-by-Side Developer Comparison" width="49%" />
-  &nbsp;
-  <img src="docs/screenshots/contribution-heatmap.png" alt="1-Year Contribution Heatmap and Commit Timing Patterns" width="49%" />
-</p>
-
-### Responsive Mobile Interface & Exportable Share Card
-<p align="center">
-  <img src="docs/screenshots/mobile-interface.png" alt="Responsive Mobile Interface" width="32%" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="docs/screenshots/share-card.png" alt="High-Resolution Developer Share Card (PNG and PDF)" width="62%" />
+  <img src="docs/screenshots/developer-comparison.png" alt="Side-by-Side Developer Comparison" width="100%" />
 </p>
 
 ---

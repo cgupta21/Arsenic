@@ -1396,6 +1396,8 @@ function Footer({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
         </div>
       </div>
 
+      <hr className="footerDivider" />
+
       <div className="footerBottom">
         <div className="footerBottomRow">
           <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">@cgupta21</a>.</span>

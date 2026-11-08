@@ -8,7 +8,7 @@ This document details Arsenic's authentication workflows, session handling archi
 
 Arsenic uses [iron-session](https://github.com/vvo/iron-session) for stateless, encrypted session storage:
 
-- **Client-Side Encrypted Cookie:** Session state is stored inside an HTTP-only browser cookie (`session`) encrypted with AES-256-GCM and signed with HMAC-SHA256 using `SESSION_SECRET`.
+- **Client-Side Encrypted Cookie:** Session state is stored inside an HTTP-only, encrypted and integrity-protected browser cookie (`session`) sealed using `iron-session` with `SESSION_SECRET`.
 - **Multi-Instance Ready:** Because session data is sealed client-side, requests can be routed to any serverless container or instance sharing the same `SESSION_SECRET` without requiring a centralized session store or database.
 - **Cookie Security Attributes:**
   - `httpOnly: true` (inaccessible to client JavaScript, mitigating XSS token theft)

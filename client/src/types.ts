@@ -80,6 +80,7 @@ export type Dashboard = {
   authenticated: boolean
   estimated?: boolean
   privateContributions: boolean
+  privateContributionsStatus?: 'included' | 'zero_or_hidden' | 'unavailable'
   api: {
     cached: boolean
     cacheTtlSeconds: number

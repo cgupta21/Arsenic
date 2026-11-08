@@ -137,7 +137,7 @@ Above all, I wanted the dashboard to remain fast, privacy-focused, and determini
 - Single-click export of developer share cards to high-resolution PNG and PDF formats.
 
 ### Session & Access Control
-- Encrypted client sessions (`iron-session`), guest search allowance, and strictly read-only OAuth scopes (`read:user user:email`). For implementation details, see the [Authentication Documentation](docs/authentication.md).
+- Encrypted client sessions (`iron-session`), guest search allowance, and strictly read-only OAuth scopes (`read:user`). For implementation details, see the [Authentication Documentation](docs/authentication.md).
 
 ---
 

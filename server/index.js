@@ -761,6 +761,19 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       }
     })
 
+    const rawRestricted = bundle.contributions?.restrictedContributionsCount
+    const hasRestrictedCount = typeof rawRestricted === 'number'
+    const privateContributionCount = includePrivate && hasRestrictedCount ? rawRestricted : 0
+
+    let privateContributionsStatus = 'unavailable'
+    if (includePrivate) {
+      if (hasRestrictedCount && rawRestricted > 0) {
+        privateContributionsStatus = 'included'
+      } else {
+        privateContributionsStatus = 'zero_or_hidden'
+      }
+    }
+
     return {
       user,
       repos: repoHealth,
@@ -771,7 +784,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
         activeDays: days.filter((day) => day.contributionCount > 0).length,
         currentStreak: streaks.current,
         longestStreak: streaks.longest,
-        privateContributionCount: includePrivate ? (bundle.contributions?.restrictedContributionsCount || 0) : 0
+        privateContributionCount
       },
       languages,
       timing,
@@ -779,6 +792,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       authenticated: Boolean(authToken),
       estimated: Boolean(bundle.estimated),
       privateContributions: Boolean(includePrivate),
+      privateContributionsStatus,
       api: {
         cached: false,
         cacheTtlSeconds: TTL / 1000,
@@ -790,8 +804,24 @@ async function buildDashboard(username, authToken, includePrivate = false) {
   })
 }
 
-function userCanSeePrivate(req, username) {
+/** Parses the granted scope string returned by GitHub into an array of lowercase scopes. */
+function parseGrantedScopes(scopeHeader) {
+  if (typeof scopeHeader !== 'string') return []
+  return scopeHeader
+    .split(/[,\s]+/)
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function isSelfUser(req, username) {
   return Boolean(req.session?.githubUser?.login && req.session.githubUser.login.toLowerCase() === username.toLowerCase())
+}
+
+function userCanSeePrivate(req, username) {
+  if (!isSelfUser(req, username)) return false
+  // Explicitly disallow private contribution analytics if the session lacks the read:user scope
+  if (req.session?.hasPrivateContributionsScope === false) return false
+  return true
 }
 
 /**
@@ -801,7 +831,7 @@ function userCanSeePrivate(req, username) {
  * is used to prevent cross-user data leakage and rate limit draining.
  */
 function sessionToken(req, targetUsername = null) {
-  if (targetUsername && userCanSeePrivate(req, targetUsername)) {
+  if (targetUsername && isSelfUser(req, targetUsername)) {
     return req.session?.githubAccessToken || defaultToken
   }
   return defaultToken
@@ -830,7 +860,10 @@ app.get('/api/me', (req, res) => {
   const provider = user
     ? (req.session?.githubUser ? 'github' : 'google')
     : null
-  res.json({ user, provider })
+  const hasPrivateContributionsScope = req.session?.githubUser
+    ? (req.session.hasPrivateContributionsScope !== false)
+    : false
+  res.json({ user, provider, hasPrivateContributionsScope })
 })
 
 app.get('/api/search-history', (_req, res) => {
@@ -1302,7 +1335,7 @@ app.get('/auth/github', async (req, res) => {
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    scope: 'read:user user:email',
+    scope: 'read:user',
     state
   })
   res.redirect(`https://github.com/login/oauth/authorize?${params.toString()}`)
@@ -1331,11 +1364,19 @@ app.get('/auth/github/callback', async (req, res) => {
     const tokenBody = await tokenResponse.json()
     if (!tokenBody.access_token) return res.status(502).send(tokenBody.error_description || 'GitHub OAuth failed.')
 
+    const grantedScopes = parseGrantedScopes(tokenBody.scope)
+    const hasPrivateContributionsScope = grantedScopes.includes('read:user')
+
     const userResponse = await fetch('https://api.github.com/user', { headers: headersFor(tokenBody.access_token) })
     const user = await userResponse.json()
     req.session.githubAccessToken = tokenBody.access_token
     req.session.githubUser = { login: user.login, name: user.name, avatar_url: user.avatar_url }
+    req.session.hasPrivateContributionsScope = hasPrivateContributionsScope
+    req.session.githubScopes = grantedScopes
     await req.session.save()
+    if (isDebugMode) {
+      console.log(`[OAuth Diagnostic] /auth/github/callback: user=${user.login}, hasPrivateScope=${hasPrivateContributionsScope}, scopeCount=${grantedScopes.length}`)
+    }
     const targetOrigin = verification.frontendOrigin || resolveFrontendOrigin(req)
     res.redirect(`${targetOrigin}/dashboard`)
   } catch (error) {
@@ -1492,6 +1533,24 @@ app.post(['/auth/logout', '/api/auth/logout'], verifySameOriginOrAllowed, async 
 })
 
 const distPath = path.resolve(__dirname, '../client/dist')
+const sourceIndexPath = path.resolve(__dirname, '../client/index.html')
+const distIndexPath = path.join(distPath, 'index.html')
+const spaIndexPath = fs.existsSync(distIndexPath) ? distIndexPath : sourceIndexPath
+let spaIndexTemplate = null
+try {
+  spaIndexTemplate = fs.readFileSync(spaIndexPath, 'utf-8')
+} catch {
+  spaIndexTemplate = null
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
 
 // Local development serves the built frontend from Express. On Vercel, the
 // frontend is served by Vercel and this Express app is exposed as a function.
@@ -1499,7 +1558,7 @@ if (process.env.VERCEL !== '1') {
   app.use(express.static(distPath))
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
-    const indexPath = path.join(distPath, 'index.html')
+    if (!spaIndexTemplate) return next()
     const match = req.path.match(/^\/u\/([^/]+)/)
     if (match) {
       let rawUser = ''
@@ -1508,33 +1567,30 @@ if (process.env.VERCEL !== '1') {
       } catch {
         rawUser = ''
       }
-      if (isValidGitHubUsername(rawUser)) {
+      if (/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(rawUser)) {
         const username = rawUser
         const title = `Arsenic — @${username}`
         const desc = `GitHub developer intelligence, contribution patterns and repository health for @${username} on Arsenic.`
         const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
-        try {
-          let content = fs.readFileSync(indexPath, 'utf-8')
-          content = content
-            .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
-            .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)
-            .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${desc}" />`)
-            .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${url}" />`)
-            .replace(/<meta property="og:type" content=".*?" \/>/, `<meta property="og:type" content="profile" />`)
-            .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`)
-            .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${desc}" />`)
-            .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${url}" />`)
-            .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${url}" />`)
-          res.setHeader('Content-Type', 'text/html; charset=utf-8')
-          return res.send(content)
-        } catch {
-          // Fallback to sendFile if index.html is not yet built
-        }
+        const safeTitle = escapeHtml(title)
+        const safeDesc = escapeHtml(desc)
+        const safeUrl = escapeHtml(url)
+        const content = spaIndexTemplate
+          .replace(/<title>[^<]*<\/title>/, `<title>${safeTitle}</title>`)
+          .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${safeTitle}" />`)
+          .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${safeDesc}" />`)
+          .replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${safeUrl}" />`)
+          .replace(/<meta property="og:type" content="[^"]*" \/>/, `<meta property="og:type" content="profile" />`)
+          .replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`)
+          .replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${safeDesc}" />`)
+          .replace(/<meta name="twitter:url" content="[^"]*" \/>/, `<meta name="twitter:url" content="${safeUrl}" />`)
+          .replace(/<link rel="canonical" href="[^"]*" \/>/, `<link rel="canonical" href="${safeUrl}" />`)
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        return res.send(content)
       }
     }
-    res.sendFile(indexPath, (error) => {
-      if (error) next()
-    })
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.send(spaIndexTemplate)
   })
 }
 
@@ -1559,7 +1615,9 @@ export {
   resolveFrontendOrigin,
   resolvePostLoginRedirect,
   sessionToken,
-  userCanSeePrivate
+  userCanSeePrivate,
+  parseGrantedScopes,
+  isSelfUser
 }
 export default app
 

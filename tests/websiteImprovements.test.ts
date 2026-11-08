@@ -169,10 +169,12 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
   })
 
   describe('3. Accurate GitHub OAuth Privacy Note', () => {
-    it('verifies server/index.js OAuth scopes are strictly read-only', () => {
-      // Confirm the requested scope is read:user user:email
-      expect(serverCode).toMatch(/scope:\s*['"]read:user user:email['"]/)
-      // Ensure no write/admin scopes are configured
+    it('verifies server/index.js OAuth scopes are strictly least-privilege read-only', () => {
+      // Confirm the requested scope is strictly read:user
+      expect(serverCode).toMatch(/scope:\s*['"]read:user['"]/)
+      // Ensure no repo, write, or private email scopes are configured
+      expect(serverCode).not.toMatch(/scope:\s*['"][^'"]*\brepo\b[^'"]*['"]/)
+      expect(serverCode).not.toMatch(/scope:\s*['"][^'"]*\buser:email\b[^'"]*['"]/)
       expect(serverCode).not.toContain('repo:status')
       expect(serverCode).not.toContain('write:org')
       expect(serverCode).not.toContain('delete_repo')
@@ -190,7 +192,7 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
     it('presents verified privacy claims in App.tsx Privacy Modal and Login Prompt', () => {
       // Explains scopes requested
       expect(appCode).toContain('read:user')
-      expect(appCode).toContain('user:email')
+      expect(appCode).not.toContain('<code>read:user, user:email')
       // Explains read-only nature and zero write permissions
       expect(appCode).toContain('Zero write operations')
       expect(appCode).toContain('read-only scopes')

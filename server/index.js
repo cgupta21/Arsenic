@@ -1533,6 +1533,24 @@ app.post(['/auth/logout', '/api/auth/logout'], verifySameOriginOrAllowed, async 
 })
 
 const distPath = path.resolve(__dirname, '../client/dist')
+const sourceIndexPath = path.resolve(__dirname, '../client/index.html')
+const distIndexPath = path.join(distPath, 'index.html')
+const spaIndexPath = fs.existsSync(distIndexPath) ? distIndexPath : sourceIndexPath
+let spaIndexTemplate = null
+try {
+  spaIndexTemplate = fs.readFileSync(spaIndexPath, 'utf-8')
+} catch {
+  spaIndexTemplate = null
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
 
 // Local development serves the built frontend from Express. On Vercel, the
 // frontend is served by Vercel and this Express app is exposed as a function.
@@ -1540,7 +1558,7 @@ if (process.env.VERCEL !== '1') {
   app.use(express.static(distPath))
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/auth/')) return next()
-    const indexPath = path.join(distPath, 'index.html')
+    if (!spaIndexTemplate) return next()
     const match = req.path.match(/^\/u\/([^/]+)/)
     if (match) {
       let rawUser = ''
@@ -1549,33 +1567,30 @@ if (process.env.VERCEL !== '1') {
       } catch {
         rawUser = ''
       }
-      if (isValidGitHubUsername(rawUser)) {
+      if (/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(rawUser)) {
         const username = rawUser
         const title = `Arsenic — @${username}`
         const desc = `GitHub developer intelligence, contribution patterns and repository health for @${username} on Arsenic.`
         const url = `https://arsenic-rho.vercel.app/u/${encodeURIComponent(username)}`
-        try {
-          let content = fs.readFileSync(indexPath, 'utf-8')
-          content = content
-            .replace(/<title>.*?<\/title>/, `<title>${title}</title>`)
-            .replace(/<meta property="og:title" content=".*?" \/>/, `<meta property="og:title" content="${title}" />`)
-            .replace(/<meta property="og:description" content=".*?" \/>/, `<meta property="og:description" content="${desc}" />`)
-            .replace(/<meta property="og:url" content=".*?" \/>/, `<meta property="og:url" content="${url}" />`)
-            .replace(/<meta property="og:type" content=".*?" \/>/, `<meta property="og:type" content="profile" />`)
-            .replace(/<meta name="twitter:title" content=".*?" \/>/, `<meta name="twitter:title" content="${title}" />`)
-            .replace(/<meta name="twitter:description" content=".*?" \/>/, `<meta name="twitter:description" content="${desc}" />`)
-            .replace(/<meta name="twitter:url" content=".*?" \/>/, `<meta name="twitter:url" content="${url}" />`)
-            .replace(/<link rel="canonical" href=".*?" \/>/, `<link rel="canonical" href="${url}" />`)
-          res.setHeader('Content-Type', 'text/html; charset=utf-8')
-          return res.send(content)
-        } catch {
-          // Fallback to sendFile if index.html is not yet built
-        }
+        const safeTitle = escapeHtml(title)
+        const safeDesc = escapeHtml(desc)
+        const safeUrl = escapeHtml(url)
+        const content = spaIndexTemplate
+          .replace(/<title>[^<]*<\/title>/, `<title>${safeTitle}</title>`)
+          .replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${safeTitle}" />`)
+          .replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${safeDesc}" />`)
+          .replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${safeUrl}" />`)
+          .replace(/<meta property="og:type" content="[^"]*" \/>/, `<meta property="og:type" content="profile" />`)
+          .replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`)
+          .replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${safeDesc}" />`)
+          .replace(/<meta name="twitter:url" content="[^"]*" \/>/, `<meta name="twitter:url" content="${safeUrl}" />`)
+          .replace(/<link rel="canonical" href="[^"]*" \/>/, `<link rel="canonical" href="${safeUrl}" />`)
+        res.setHeader('Content-Type', 'text/html; charset=utf-8')
+        return res.send(content)
       }
     }
-    res.sendFile(indexPath, (error) => {
-      if (error) next()
-    })
+    res.setHeader('Content-Type', 'text/html; charset=utf-8')
+    res.send(spaIndexTemplate)
   })
 }
 

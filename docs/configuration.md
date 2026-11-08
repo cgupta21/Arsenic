@@ -8,7 +8,7 @@ This document provides a comprehensive reference for configuring Arsenic in loca
 
 | Variable | Environment | Default / Example | Purpose & Fallback Behavior |
 |:---|:---:|:---|:---|
-| `SESSION_SECRET` | **Required in Prod**<br>*(Optional in Dev)* | `your-32-character-session-secret-here` | 32+ character random string used by `iron-session` to seal session cookies via AES-256-GCM.<br>• **Production:** If absent or shorter than 32 characters, an error is logged and an insecure fallback is used.<br>• **Generation:** Generate using `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
+| `SESSION_SECRET` | **Required in Prod**<br>*(Optional in Dev)* | `your-32-character-session-secret-here` | 32+ character random string used by `iron-session` to seal encrypted and integrity-protected session cookies.<br>• **Production:** If absent, shorter than 32 characters, or matching a placeholder, process startup fails immediately with an error. Fallback secrets are prohibited in production.<br>• **Generation:** Generate using `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
 | `GITHUB_TOKEN` | **Recommended in Prod**<br>*(Optional in Dev)* | `ghp_yourPersonalAccessTokenPlaceholder` | Personal Access Token (classic with `read:user` or fine-grained public repository access).<br>• **Unset:** Operates in Public API Mode (estimated activity, 60 req/hr per outbound IP).<br>• **Configured:** Unlocks 5,000 req/hr rate limits and full 1-year contribution heatmaps via GitHub GraphQL API. |
 | `GITHUB_CLIENT_ID` | Optional | `your_github_client_id_placeholder` | Client ID from your registered GitHub OAuth App.<br>• **Unset:** "Sign in with GitHub" is disabled. All public analytics and comparisons remain available. |
 | `GITHUB_CLIENT_SECRET` | Optional | `your_github_client_secret_placeholder` | Client Secret from your registered GitHub OAuth App.<br>• Must be configured together with `GITHUB_CLIENT_ID`. |
@@ -22,6 +22,9 @@ This document provides a comprehensive reference for configuring Arsenic in loca
 | `SUMMARY_LIMIT_PER_10_MIN` | Optional | `5` | Per-IP request limit for `/api/summary/:username` within a 10-minute window. |
 | `SUMMARY_DAILY_CAP` | Optional | `200` | Maximum number of non-cached summaries generated server-wide per calendar day. |
 | `TRUST_PROXY` | Optional | `1` | Enables Express proxy trusting behind reverse proxies (Vercel, Render, Nginx) for secure cookies and client IP resolution. |
+| `GITHUB_FETCH_TIMEOUT_MS` | Optional | `9000` | Timeout in milliseconds for upstream GitHub REST and GraphQL requests (defaults to 9000ms / 9s). |
+| `COOKIE_SAMESITE` | Optional | `lax` | SameSite attribute for session and OAuth state cookies (`lax` or `none`; when `none`, `secure: true` is enforced). |
+| `DEBUG` | Optional | `false` | When set to `true` or `1`, enables diagnostic console logging for OAuth flows and session handling. |
 | `NODE_ENV` | Optional | `development` | Setting to `production` enables secure cookies (`secure: true`), strict HSTS headers, and enforces `SESSION_SECRET` validation. |
 
 ---
@@ -34,7 +37,7 @@ Never commit real keys or production secrets to Git. When generating a productio
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-The resulting 64-character hexadecimal string meets the entropy requirements for `iron-session` AES-256-GCM encryption.
+The resulting 64-character hexadecimal string meets the entropy requirements for `iron-session` session cookie encryption.
 
 ---
 

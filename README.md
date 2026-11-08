@@ -294,7 +294,7 @@ Arsenic includes dedicated, accessible legal policy routes designed with semanti
 ### Request Lifecycle & Concurrency Resilience
 - **Parallel Upstream Fetching:** Calls `/users/:username`, `/users/:username/repos`, and `/users/:username/events/public` simultaneously via `Promise.all` to avoid sequential network waterfalls.
 - **Bounded Commit Timing Race:** Commit history analysis is capped at the top 3 active non-fork repositories and raced against a 3.5s timeout (`Promise.race`).
-- **Dedicated Request Timeouts:** Backend queries are bounded by a 9-second timeout (`GITHUB_REQUEST_TIMEOUT_MS`), and frontend requests by an 18-second timeout (`DEFAULT_REQUEST_TIMEOUT_MS`).
+- **Dedicated Request Timeouts:** Backend queries are bounded by a 9-second timeout (`GITHUB_FETCH_TIMEOUT_MS`), and frontend requests by an 18-second timeout (`DEFAULT_REQUEST_TIMEOUT_MS`).
 - **Cancellation & Out-of-Order Protection:** In-flight browser requests are aborted via `AbortController` on query changes or unmounts, and generation counters (`genRef`) discard stale responses.
 - **Graceful Error Recovery:** Granular mapping of HTTP 400 (invalid user), 401 (auth expired), 404 (user not found), 429 (rate limited with reset time), and 504 (timeout) with dedicated recovery UI.
 
@@ -504,7 +504,7 @@ Detailed architectural and operational documentation is available in the [`docs/
 | [Security Architecture & Policies](docs/security.md) | Content Security Policy, DevTools verification steps, CSRF protection, and input validation. |
 | [Authentication & Sessions](docs/authentication.md) | Encrypted and integrity-protected session cookies (`iron-session`), GitHub and Google OAuth flows, and guest search allowance. |
 | [Rate Limiting & Caching](docs/rate-limits-and-caching.md) | Upstream GitHub limits, application rate limits, in-memory caching, and multi-instance trade-offs. |
-| [Configuration Reference](docs/configuration.md) | Complete environment variables reference, safe secret generation, and fallback behavior. |
+| [Configuration Reference](docs/configuration.md) | Environment variables reference, safe secret generation, and server configuration. |
 | [Deployment Guide](docs/deployment.md) | Primary Vercel deployment, OAuth app setup, standalone Node server, and Docker instructions. |
 
 ---

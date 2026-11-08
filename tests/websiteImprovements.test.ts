@@ -245,7 +245,7 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
       expect(appCode).toContain('Chandan Kumar Gupta')
       expect(appCode).toContain('https://github.com/cgupta21')
       expect(appCode).toContain('https://github.com/cgupta21/Arsenic')
-      expect(appCode).toContain('GitHub developer intelligence and repository analytics.')
+      expect(appCode).toContain('GitHub developer intelligence, contribution analytics and repository health scoring.')
       expect(appCode).toContain('new Date().getFullYear()')
     })
 

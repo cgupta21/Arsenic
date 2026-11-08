@@ -1311,97 +1311,97 @@ function Footer({ onOpenPrivacy }: { onOpenPrivacy: () => void }) {
 
   return (
     <footer className="siteFooter">
-      <div className="footerTop">
+      <div className="footerGrid">
         <div className="footerBrand">
           <div className="brand">
             <img className="brandLogo footerLogo" src="/assets/arsenic-logo.svg" alt="Arsenic" />
           </div>
           <p className="footerDescription">
-            GitHub developer intelligence and repository analytics.
+            GitHub developer intelligence, contribution analytics and repository health scoring.
           </p>
         </div>
 
-        <div className="footerLinks">
-          <div className="footerCol">
-            <span className="footerColTitle">Project</span>
-            <a href="https://github.com/cgupta21/Arsenic" target="_blank" rel="noopener noreferrer">
-              <Github size={14} /> GitHub Repository ↗
-            </a>
-            <a href="https://github.com/cgupta21/Arsenic/blob/main/README.md" target="_blank" rel="noopener noreferrer">
-              Documentation ↗
-            </a>
-            <button type="button" className="footerTextLink" onClick={onOpenPrivacy}>
-              <ShieldCheck size={14} /> OAuth Transparency
-            </button>
-          </div>
+        <div className="footerCol">
+          <span className="footerColTitle">Developer</span>
+          <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">
+            Chandan Kumar Gupta ↗
+          </a>
+          <button
+            type="button"
+            className="footerTextLink"
+            onClick={() => {
+              pushRoute('/u/cgupta21')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Showcase Profile (@cgupta21)
+          </button>
+          <button
+            type="button"
+            className="footerTextLink"
+            onClick={() => {
+              pushRoute('/compare')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Compare Developers
+          </button>
+        </div>
 
-          <div className="footerCol">
-            <span className="footerColTitle">Legal</span>
-            <button
-              type="button"
-              className="footerTextLink"
-              onClick={() => {
-                pushRoute('/privacy')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-            >
-              Privacy Policy
-            </button>
-            <button
-              type="button"
-              className="footerTextLink"
-              onClick={() => {
-                pushRoute('/terms')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-            >
-              Terms of Service
-            </button>
-            <button
-              type="button"
-              className="footerTextLink"
-              onClick={() => {
-                pushRoute('/cookies')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-            >
-              Cookie Policy
-            </button>
-          </div>
+        <div className="footerCol">
+          <span className="footerColTitle">Project</span>
+          <a href="https://github.com/cgupta21/Arsenic" target="_blank" rel="noopener noreferrer">
+            <Github size={14} /> GitHub Repository ↗
+          </a>
+          <a href="https://github.com/cgupta21/Arsenic/blob/main/README.md" target="_blank" rel="noopener noreferrer">
+            Documentation ↗
+          </a>
+          <button type="button" className="footerTextLink" onClick={onOpenPrivacy}>
+            <ShieldCheck size={14} /> OAuth Transparency
+          </button>
+        </div>
 
-          <div className="footerCol">
-            <span className="footerColTitle">Developer</span>
-            <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">
-              Chandan Kumar Gupta ↗
-            </a>
-            <button
-              type="button"
-              className="footerTextLink"
-              onClick={() => {
-                pushRoute('/u/cgupta21')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-            >
-              Showcase Profile (@cgupta21)
-            </button>
-            <button
-              type="button"
-              className="footerTextLink"
-              onClick={() => {
-                pushRoute('/compare')
-                window.scrollTo({ top: 0, behavior: 'smooth' })
-              }}
-            >
-              Compare Developers
-            </button>
-          </div>
+        <div className="footerCol">
+          <span className="footerColTitle">Legal</span>
+          <button
+            type="button"
+            className="footerTextLink"
+            onClick={() => {
+              pushRoute('/privacy')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Privacy Policy
+          </button>
+          <button
+            type="button"
+            className="footerTextLink"
+            onClick={() => {
+              pushRoute('/terms')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Terms of Service
+          </button>
+          <button
+            type="button"
+            className="footerTextLink"
+            onClick={() => {
+              pushRoute('/cookies')
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+          >
+            Cookie Policy
+          </button>
         </div>
       </div>
 
       <div className="footerBottom">
-        <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">@cgupta21</a>.</span>
-        <span className="footerTagline">Independent GitHub analytics · Not affiliated with GitHub, Inc. or Google LLC.</span>
-        <span className="footerContact">Contact: <a href="mailto:arsenic.helpdesk@gmail.com">arsenic.helpdesk@gmail.com</a></span>
+        <div className="footerBottomRow">
+          <span>© {currentYear} Arsenic. Built by <a href="https://github.com/cgupta21" target="_blank" rel="noopener noreferrer">@cgupta21</a>.</span>
+          <span className="footerContact">Contact: <a href="mailto:arsenic.helpdesk@gmail.com">arsenic.helpdesk@gmail.com</a></span>
+        </div>
+        <span className="footerDisclaimer">Independent GitHub analytics · Not affiliated with GitHub, Inc. or Google LLC.</span>
       </div>
     </footer>
   )

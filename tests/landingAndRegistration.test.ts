@@ -69,15 +69,15 @@ describe('Arsenic Landing Page & Registration Flow', () => {
       expect(appCode).toContain('id="primary-navigation"')
     })
 
-    it('contains the specified hero headline: "Analyze GitHub repositories and developer cadence"', () => {
-      expect(landingCode).toContain('Analyze GitHub repositories and')
-      expect(landingCode).toContain('developer cadence')
+    it('contains the specified hero headline: "Analyze GitHub developer profiles and engineering cadence"', () => {
+      expect(landingCode).toContain('Analyze GitHub developer profiles and')
+      expect(landingCode).toContain('engineering cadence')
       expect(landingCode).toContain('brandAccent')
     })
 
-    it('supporting copy explains repository activity, developer velocity, and commit signals', () => {
+    it('supporting copy explains repository portfolio health, developer velocity, and commit signals', () => {
       expect(landingCode).toContain('Inspect commit frequency')
-      expect(landingCode).toContain('repository health')
+      expect(landingCode).toContain('repository portfolio health')
       expect(landingCode).toContain('contribution velocity')
     })
 
@@ -90,8 +90,8 @@ describe('Arsenic Landing Page & Registration Flow', () => {
     it('includes high-fidelity visual dashboard preview labeled with genuine application signals', () => {
       expect(landingCode).toContain('dashboardPreviewCard')
       expect(landingCode).toContain('Sample analysis')
-      expect(landingCode).toContain('@cgupta21 / Arsenic')
-      expect(landingCode).toContain('Sample analysis based on real metrics from @cgupta21/Arsenic')
+      expect(landingCode).toContain('@cgupta21')
+      expect(landingCode).toContain('Sample analysis based on public developer metrics for @cgupta21')
     })
 
     it('advertises strictly supported features: Repository Intelligence, Developer Activity Insights, Contribution Analysis, Repository Summaries, Search and Explore', () => {
@@ -108,8 +108,8 @@ describe('Arsenic Landing Page & Registration Flow', () => {
     })
 
     it('implements the 3 How-It-Works steps', () => {
-      expect(landingCode).toContain('Find a GitHub user or repository')
-      expect(landingCode).toContain('Aggregate repository information')
+      expect(landingCode).toContain('Find a public GitHub developer')
+      expect(landingCode).toContain('Aggregate developer telemetry')
       expect(landingCode).toContain('Explore developer insights')
     })
 
@@ -117,6 +117,21 @@ describe('Arsenic Landing Page & Registration Flow', () => {
       expect(landingCode).toContain('landingFinalCta')
       expect(landingCode).toContain('id="final-get-started-btn"')
       expect(landingCode).toContain('id="final-try-free-btn"')
+    })
+
+    it('does not contain misleading claims suggesting direct repository URL or standalone repository analysis', () => {
+      expect(landingCode).not.toContain('Analyze GitHub repositories and')
+      expect(landingCode).not.toContain('Find a GitHub user or repository')
+      expect(landingCode).not.toContain('Three steps to inspect any repository')
+      expect(landingCode).not.toContain('Aggregate repository information')
+      expect(landingCode).not.toContain('repository handle')
+      expect(landingCode).not.toContain('@cgupta21 / Arsenic')
+      expect(landingCode).not.toContain('for any repository or developer profile')
+      expect(landingCode).not.toContain('Inspect GitHub repositories and developer patterns')
+
+      // Must clearly specify username or profile URL
+      expect(landingCode).toContain('GitHub username or profile URL')
+      expect(landingCode).toContain('aria-label="Developer profile search"')
     })
 
     it('does not invent unverified customer counts, fake star ratings, or testimonials on landing page', () => {

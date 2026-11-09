@@ -139,7 +139,7 @@ export default function App() {
   }, [])
   useEffect(() => {
     const title = route.mode === 'landing'
-      ? 'Arsenic — Understand Any GitHub Repository'
+      ? 'Arsenic — GitHub Developer Intelligence'
       : route.mode === 'register'
         ? 'Arsenic — Start Exploring GitHub Intelligence'
         : route.mode === 'compare'
@@ -156,9 +156,9 @@ export default function App() {
     document.title = title
 
     const desc = route.mode === 'landing'
-      ? 'Understand any GitHub repository. Turn repository activity and developer signals into useful insights.'
+      ? 'Analyze public GitHub developer profiles. Turn contribution activity and developer cadence into useful insights.'
       : route.mode === 'register'
-        ? 'Create your Arsenic account or continue with GitHub or Google for unlimited repository intelligence.'
+        ? 'Create your Arsenic account or continue with GitHub or Google for unlimited developer intelligence.'
         : route.mode === 'compare'
           ? 'Compare GitHub developers head-to-head across streaks, collaboration and repository health.'
           : route.mode === 'privacy'

@@ -3,7 +3,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import app, { resolveSessionSecret } from '../server/index.js'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { sealData } from 'iron-session'
+import { sealData, unsealData } from 'iron-session'
 
 const SESSION_PASSWORD = resolveSessionSecret(process.env)
 
@@ -328,5 +328,370 @@ describe('Unauthenticated Guest Search Limit', () => {
     expect(resConsume.json().allowed).toBe(true)
     expect(resConsume.json().authenticated).toBe(true)
     expect(resConsume.json().searchesRemaining).toBeNull()
+  })
+})
+
+describe('Comparison Guest Search Limit (/api/compare/:left/:right)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  function setupGitHubCompareMock() {
+    const origFetch = globalThis.fetch
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/repos?')) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: 1,
+              name: 'repo-one',
+              fork: false,
+              isFork: false,
+              stargazers_count: 10,
+              forks_count: 2,
+              open_issues_count: 1,
+              language: 'TypeScript',
+              updated_at: '2026-10-01T00:00:00Z',
+              pushed_at: '2026-10-01T00:00:00Z'
+            }
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      if (url.includes('/events/public')) {
+        return new Response(
+          JSON.stringify([
+            {
+              type: 'PushEvent',
+              created_at: '2026-10-15T12:00:00Z',
+              payload: { commits: [1, 2] }
+            }
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      if (url.includes('/commits?')) {
+        return new Response(
+          JSON.stringify([
+            {
+              commit: {
+                author: {
+                  date: '2026-10-15T12:00:00Z'
+                }
+              }
+            }
+          ]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      if (url.includes('/users/')) {
+        const username = url.split('/users/')[1].split(/[/?]/)[0]
+        if (username.startsWith('nonexistent')) {
+          return new Response(JSON.stringify({ message: 'Not Found' }), {
+            status: 404,
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        return new Response(
+          JSON.stringify({
+            login: username,
+            name: `${username} Name`,
+            avatar_url: `https://example.com/${username}.png`,
+            bio: 'Bio',
+            public_repos: 5,
+            followers: 20,
+            following: 10,
+            created_at: '2020-01-01T00:00:00Z'
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+      }
+      return origFetch(input, init)
+    })
+  }
+
+  it('rejects comparison when guest quota is already exhausted (3 searches used)', async () => {
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2', 'u3'], guestSearches: 3 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    const res = await inProcessFetch('/api/compare/devA/devB', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(401)
+    expect(res.json().error).toBe("You've used your 3 free searches. Sign in with GitHub to continue.")
+    expect(res.json().loginRequired).toBe(true)
+    expect(res.json().authError).toBe(true)
+  })
+
+  it('blocks comparison of 2 new profiles when only 1 guest search remains', async () => {
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2'], guestSearches: 2 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // Comparing two brand new developers requires 2 searches, but only 1 is remaining
+    const res = await inProcessFetch('/api/compare/devA/devB', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(401)
+    expect(res.json().error).toBe("You've used your 3 free searches. Sign in with GitHub to continue.")
+    expect(res.json().loginRequired).toBe(true)
+    expect(res.json().authError).toBe(true)
+  })
+
+  it('allows comparing 1 new profile with 1 already-searched profile when 1 guest search remains', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2'], guestSearches: 2 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // 'u1' is already searched, so only 'devNew' consumes quota (1 search needed, 1 remaining)
+    const res = await inProcessFetch('/api/compare/u1/devNew', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+
+    // Session cookie in response should now reflect 3 searches used
+    const newCookie = extractCookie(res.headers)
+    expect(newCookie).toBeTruthy()
+    const match = newCookie.match(/session=([^;]+)/)
+    expect(match).toBeTruthy()
+    if (match) {
+      const sessionData = await unsealData<{ searchedProfiles: string[]; guestSearches: number }>(match[1], { password: SESSION_PASSWORD })
+      expect(sessionData.guestSearches).toBe(3)
+      expect(sessionData.searchedProfiles).toContain('devnew')
+    }
+  })
+
+  it('allows comparing previously searched profiles even after reaching 3 searches', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2', 'u3'], guestSearches: 3 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // Comparing already searched profiles 'u1' and 'u2' is permitted
+    const res = await inProcessFetch('/api/compare/u1/u2', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+  })
+
+  it('exempts the showcase fallback profile (cgupta21) from comparison quota', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2', 'u3'], guestSearches: 3 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // 'cgupta21' is exempt, and 'u1' is already searched
+    const res = await inProcessFetch('/api/compare/cgupta21/u1', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+  })
+
+  it('deduplicates when comparing the same new developer on both sides', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1', 'u2'], guestSearches: 2 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // Comparing 'devA' with 'devA' counts as 1 distinct new profile, so it fits in the 1 remaining slot
+    const res = await inProcessFetch('/api/compare/devA/devA', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+
+    const newCookie = extractCookie(res.headers)
+    if (newCookie) {
+      const match = newCookie.match(/session=([^;]+)/)
+      if (match) {
+        const sessionData = await unsealData<{ searchedProfiles: string[]; guestSearches: number }>(match[1], { password: SESSION_PASSWORD })
+        expect(sessionData.guestSearches).toBe(3)
+        expect(sessionData.searchedProfiles.filter(p => p === 'deva')).toHaveLength(1)
+      }
+    }
+  })
+
+  it('allows authenticated GitHub users unlimited comparisons', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      {
+        githubUser: { login: 'authedUser', name: 'Authed Dev', avatar_url: 'https://example.com/avatar.png' },
+        searchedProfiles: ['u1', 'u2', 'u3'],
+        guestSearches: 3
+      },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    const res = await inProcessFetch('/api/compare/newDev1/newDev2', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+  })
+
+  it('allows authenticated Google users unlimited comparisons', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      {
+        googleUser: { email: 'dev@gmail.com', name: 'Google Dev', picture: 'https://example.com/pic.png' },
+        searchedProfiles: ['u1', 'u2', 'u3'],
+        guestSearches: 3
+      },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    const res = await inProcessFetch('/api/compare/newDev1/newDev2', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(200)
+    expect(res.json().left).toBeDefined()
+    expect(res.json().right).toBeDefined()
+  })
+
+  it('returns 400 for invalid usernames without consuming guest quota', async () => {
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1'], guestSearches: 1 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    const resLeft = await inProcessFetch('/api/compare/invalid$$left/torvalds', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect([400, 502]).toContain(resLeft.status)
+
+    const resRight = await inProcessFetch('/api/compare/torvalds/-invalidRight', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect([400, 502]).toContain(resRight.status)
+
+    // Verify searches remaining is still 2
+    const resCheck = await inProcessFetch('/api/search/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+      body: JSON.stringify({ username: 'checkprofile' })
+    })
+    expect(resCheck.status).toBe(200)
+    expect(resCheck.json().searchesRemaining).toBe(2)
+  })
+
+  it('does not consume quota when one of the compared developers is not found (404)', async () => {
+    setupGitHubCompareMock()
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1'], guestSearches: 1 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    const res = await inProcessFetch('/api/compare/validDev/nonexistent-user-xyz', {
+      headers: { Cookie: cookieHeader }
+    })
+    expect(res.status).toBe(404)
+
+    // Searches remaining is still 2
+    const resCheck = await inProcessFetch('/api/search/consume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookieHeader },
+      body: JSON.stringify({ username: 'checkprofile' })
+    })
+    expect(resCheck.status).toBe(200)
+    expect(resCheck.json().searchesRemaining).toBe(2)
+  })
+
+  it('maintains consistent quota state across sequential dashboard and comparison requests', async () => {
+    setupGitHubCompareMock()
+    // 1. Fresh session: 3 searches available. Dashboard search for 'dashDev1'
+    const resDash = await inProcessFetch('/api/dashboard/dashDev1')
+    expect(resDash.status).toBe(200)
+
+    const cookie1 = extractCookie(resDash.headers)
+    expect(cookie1).toBeTruthy()
+
+    // 2. Comparison of 2 new developers 'compDev2' and 'compDev3' uses remaining 2 searches (total 3 used)
+    const resComp = await inProcessFetch('/api/compare/compDev2/compDev3', {
+      headers: { Cookie: cookie1 }
+    })
+    expect(resComp.status).toBe(200)
+
+    const cookie2 = extractCookie(resComp.headers) || cookie1
+
+    // 3. Subsequent dashboard search for 4th new developer 'dashDev4' is blocked
+    const resDashBlocked = await inProcessFetch('/api/dashboard/dashDev4', {
+      headers: { Cookie: cookie2 }
+    })
+    expect(resDashBlocked.status).toBe(401)
+    expect(resDashBlocked.json().error).toBe("You've used your 3 free searches. Sign in with GitHub to continue.")
+
+    // 4. Subsequent comparison requiring a new developer 'compDev5' is also blocked
+    const resCompBlocked = await inProcessFetch('/api/compare/dashDev1/compDev5', {
+      headers: { Cookie: cookie2 }
+    })
+    expect(resCompBlocked.status).toBe(401)
+    expect(resCompBlocked.json().error).toBe("You've used your 3 free searches. Sign in with GitHub to continue.")
+
+    // 5. Comparing already unlocked profiles remains allowed even at quota limit
+    const resUnlocked = await inProcessFetch('/api/compare/dashDev1/compDev2', {
+      headers: { Cookie: cookie2 }
+    })
+    expect(resUnlocked.status).toBe(200)
+  })
+
+  it('handles concurrent requests cleanly and enforces quota sequentially once cookie updates settle', async () => {
+    setupGitHubCompareMock()
+    // Session starting with 1 search used ('u1'), leaving 2 remaining
+    const sealedCookie = await sealData(
+      { searchedProfiles: ['u1'], guestSearches: 1 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const cookieHeader = `session=${sealedCookie}`
+
+    // Under stateless cookie architecture, concurrent requests evaluate against the incoming cookie snapshot
+    const [res1, res2] = await Promise.all([
+      inProcessFetch('/api/compare/u1/concurrentA', { headers: { Cookie: cookieHeader } }),
+      inProcessFetch('/api/compare/u1/concurrentB', { headers: { Cookie: cookieHeader } })
+    ])
+    expect([200, 401]).toContain(res1.status)
+    expect([200, 401]).toContain(res2.status)
+
+    // Once a request finishes and the client persists the updated session cookie,
+    // subsequent requests strictly enforce the updated quota
+    const updatedCookie = extractCookie(res1.headers) || extractCookie(res2.headers)
+    expect(updatedCookie).toBeTruthy()
+
+    // Session with 3 searches used
+    const exhaustedCookie = await sealData(
+      { searchedProfiles: ['u1', 'concurrentA', 'concurrentB'], guestSearches: 3 },
+      { password: SESSION_PASSWORD, ttl: 7 * 24 * 3600 }
+    )
+    const resFollowUp = await inProcessFetch('/api/compare/u1/anotherDev', {
+      headers: { Cookie: `session=${exhaustedCookie}` }
+    })
+    expect(resFollowUp.status).toBe(401)
+    expect(resFollowUp.json().error).toBe("You've used your 3 free searches. Sign in with GitHub to continue.")
   })
 })

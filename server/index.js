@@ -872,6 +872,65 @@ app.get('/api/search-history', (_req, res) => {
 const GUEST_SEARCH_LIMIT = 3
 const FALLBACK_PROFILE = 'cgupta21'
 
+/**
+ * Evaluates guest search quota status for one or more requested usernames.
+ *
+ * Architectural Note on Guest Quota & Stateless Concurrency:
+ * Arsenic enforces guest search quota using encrypted, stateless client cookies (iron-session)
+ * without a persistent database or distributed cache (e.g. Redis).
+ * This acts as a UX onboarding gate to encourage GitHub/Google sign-in.
+ * In a serverless multi-instance deployment (e.g. Vercel), concurrent requests from the same
+ * unauthenticated client may read the same cookie snapshot before session writes settle.
+ * Robust, race-proof rate-limiting across distributed serverless instances would require
+ * external shared infrastructure.
+ */
+function getGuestQuotaStatus(req, usernames) {
+  if (isAuthenticated(req)) {
+    return { allowed: true, neededProfiles: [], used: 0, remaining: null }
+  }
+
+  const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
+  const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
+  const remaining = Math.max(0, GUEST_SEARCH_LIMIT - used)
+
+  // Find unique, unexempt profiles that have not been searched yet
+  const neededProfiles = []
+  for (const raw of usernames) {
+    if (!raw) continue
+    const lower = String(raw).replace(/^@/, '').trim().toLowerCase()
+    if (lower !== FALLBACK_PROFILE.toLowerCase() && !searched.includes(lower) && !neededProfiles.includes(lower)) {
+      neededProfiles.push(lower)
+    }
+  }
+
+  const allowed = neededProfiles.length <= remaining
+  return {
+    allowed,
+    neededProfiles,
+    used,
+    remaining,
+    error: allowed ? null : "You've used your 3 free searches. Sign in with GitHub to continue."
+  }
+}
+
+async function recordGuestSearches(req, neededProfiles) {
+  if (isAuthenticated(req) || !req.session || !neededProfiles || neededProfiles.length === 0) return
+  const searched = Array.isArray(req.session.searchedProfiles) ? [...req.session.searchedProfiles] : []
+  let modified = false
+  for (const p of neededProfiles) {
+    const lower = String(p).replace(/^@/, '').trim().toLowerCase()
+    if (lower !== FALLBACK_PROFILE.toLowerCase() && !searched.includes(lower)) {
+      searched.push(lower)
+      modified = true
+    }
+  }
+  if (modified) {
+    req.session.searchedProfiles = searched
+    req.session.guestSearches = searched.length
+    await req.session.save()
+  }
+}
+
 app.post('/api/search/consume', verifySameOriginOrAllowed, async (req, res) => {
   res.set('Cache-Control', 'no-store')
 
@@ -957,26 +1016,17 @@ app.get('/api/dashboard/:username', async (req, res) => {
   const token = sessionToken(req, username)
 
   // Enforce guest search limit on the backend
-  const isAuth = isAuthenticated(req)
-  const searched = Array.isArray(req.session?.searchedProfiles) ? [...req.session.searchedProfiles] : []
-  const used = Math.max(searched.length, Number(req.session?.guestSearches || 0))
-  const isExemptOrRepeated = lowerUser === FALLBACK_PROFILE.toLowerCase() || searched.includes(lowerUser)
-
-  if (!isAuth && !isExemptOrRepeated && used >= GUEST_SEARCH_LIMIT) {
+  const quota = getGuestQuotaStatus(req, [lowerUser])
+  if (!quota.allowed) {
     return res.status(401).json({
-      error: "You've used your 3 free searches. Sign in with GitHub to continue.",
+      error: quota.error,
       loginRequired: true,
       authError: true
     })
   }
 
   const recordGuestSearch = async () => {
-    if (!isAuth && lowerUser !== FALLBACK_PROFILE.toLowerCase() && !searched.includes(lowerUser)) {
-      searched.push(lowerUser)
-      req.session.searchedProfiles = searched
-      req.session.guestSearches = searched.length
-      await req.session.save()
-    }
+    await recordGuestSearches(req, quota.neededProfiles)
   }
 
   try {
@@ -1103,12 +1153,24 @@ app.get('/api/compare/:left/:right', async (req, res) => {
   if (!isValidGitHubUsername(left) || !isValidGitHubUsername(right)) {
     return res.status(400).json({ error: 'Invalid GitHub username.' })
   }
+
+  // Enforce guest search limit on comparison (accounting for both developers)
+  const quota = getGuestQuotaStatus(req, [left, right])
+  if (!quota.allowed) {
+    return res.status(401).json({
+      error: quota.error,
+      loginRequired: true,
+      authError: true
+    })
+  }
+
   try {
     const [leftData, rightData] = await Promise.all([
       buildDashboard(left, sessionToken(req, left), userCanSeePrivate(req, left)),
       buildDashboard(right, sessionToken(req, right), userCanSeePrivate(req, right))
     ])
-    res.json({ left: leftData, right: rightData })
+    await recordGuestSearches(req, quota.neededProfiles)
+    return res.json({ left: leftData, right: rightData })
   } catch (error) {
     if (error.status === 400) return res.status(400).json({ error: error.message || 'Invalid GitHub username.' })
     if (error.status === 401) {
@@ -1119,7 +1181,7 @@ app.get('/api/compare/:left/:right', async (req, res) => {
     if (error.status === 404) return res.status(404).json({ error: error.message })
     if (error.status === 429 || error.rate?.remaining === '0') return res.status(429).json({ error: 'GitHub is rate-limiting the comparison. Please wait and try again.', rateLimit: true })
     console.error('Compare error:', error)
-    res.status(502).json({ error: error.message || 'Could not compare those profiles.' })
+    return res.status(502).json({ error: error.message || 'Could not compare those profiles.' })
   }
 })
 

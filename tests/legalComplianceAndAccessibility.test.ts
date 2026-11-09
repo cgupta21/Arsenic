@@ -49,6 +49,7 @@ describe('Arsenic — Legal Compliance, Privacy, Security & Accessibility Suite'
   const appCode = readFileSync(resolve(rootDir, 'client/src/App.tsx'), 'utf-8')
   const landingCode = readFileSync(resolve(rootDir, 'client/src/components/LandingPage.tsx'), 'utf-8')
   const stylesCss = readFileSync(resolve(rootDir, 'client/src/styles.css'), 'utf-8')
+  const landingCss = readFileSync(resolve(rootDir, 'client/src/landing.css'), 'utf-8')
   const privacyCode = readFileSync(resolve(rootDir, 'client/src/components/legal/PrivacyPolicy.tsx'), 'utf-8')
   const termsCode = readFileSync(resolve(rootDir, 'client/src/components/legal/TermsOfService.tsx'), 'utf-8')
   const cookiesCode = readFileSync(resolve(rootDir, 'client/src/components/legal/CookiePolicy.tsx'), 'utf-8')
@@ -262,6 +263,70 @@ describe('Arsenic — Legal Compliance, Privacy, Security & Accessibility Suite'
       // Replaced #70736a with #A8ABA0 which yields >4.5:1 on #11110F
       expect(stylesCss).toContain('#A8ABA0')
       expect(stylesCss).not.toMatch(/\.footerBottom\s*\{[^}]*color:\s*#70736a/)
+    })
+
+    it('ensures primary CTA buttons satisfy WCAG AA contrast (>= 4.5:1) in all interactive states (M-04)', () => {
+      function srgbToLinear(c: number): number {
+        const v = c / 255
+        return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
+      }
+      function relativeLuminance(hex: string): number {
+        let clean = hex.replace('#', '')
+        if (clean.length === 3) clean = clean.split('').map((x) => x + x).join('')
+        const r = parseInt(clean.substring(0, 2), 16)
+        const g = parseInt(clean.substring(2, 4), 16)
+        const b = parseInt(clean.substring(4, 6), 16)
+        return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b)
+      }
+      function contrastRatio(hex1: string, hex2: string): number {
+        const l1 = relativeLuminance(hex1)
+        const l2 = relativeLuminance(hex2)
+        const lighter = Math.max(l1, l2)
+        const darker = Math.min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+      }
+
+      const terracotta = '#C96A45'
+      const hoverTerracotta = '#d47651'
+      const activeTerracotta = '#c4643f'
+      const darkText = '#11110F'
+      const appDarkText = '#17120f'
+      const pageBg = '#11110F'
+
+      // Default state contrast: must meet or exceed WCAG AA 4.5:1 for normal text
+      const defaultContrast = contrastRatio(darkText, terracotta)
+      expect(defaultContrast).toBeGreaterThanOrEqual(4.5)
+      expect(defaultContrast).toBeCloseTo(5.07, 1)
+
+      // Hover state contrast: must meet or exceed 4.5:1
+      const hoverContrast = contrastRatio(darkText, hoverTerracotta)
+      expect(hoverContrast).toBeGreaterThanOrEqual(4.5)
+      expect(hoverContrast).toBeCloseTo(5.86, 1)
+
+      // Active state contrast: must meet or exceed 4.5:1
+      const activeContrast = contrastRatio(darkText, activeTerracotta)
+      expect(activeContrast).toBeGreaterThanOrEqual(4.5)
+      expect(activeContrast).toBeCloseTo(4.72, 1)
+
+      // Application styles.css primaryBtn contrast
+      const appBtnContrast = contrastRatio(appDarkText, terracotta)
+      expect(appBtnContrast).toBeGreaterThanOrEqual(4.5)
+
+      // Focus indicator contrast against dark page background: must meet or exceed WCAG 3:1 non-text requirement
+      const focusRingContrast = contrastRatio(terracotta, pageBg)
+      expect(focusRingContrast).toBeGreaterThanOrEqual(3.0)
+
+      // Verify landing.css does not use #fff on terracotta for primary CTA buttons
+      expect(landingCss).not.toMatch(/\.landingCtaPrimary\s*\{[^}]*color:\s*#fff/)
+      expect(landingCss).not.toMatch(/\.finalCtaPrimary\s*\{[^}]*color:\s*#fff/)
+      expect(landingCss).not.toMatch(/\.navGetStartedBtn\s*\{[^}]*color:\s*#fff/)
+      expect(landingCss).not.toMatch(/\.landingSearchSubmitBtn:hover\s*\{[^}]*color:\s*#fff/)
+
+      // Verify landing.css defines dark text #11110F on primary buttons
+      expect(landingCss).toMatch(/\.landingCtaPrimary\s*\{[^}]*color:\s*#11110F/)
+      expect(landingCss).toMatch(/\.finalCtaPrimary\s*\{[^}]*color:\s*#11110F/)
+      expect(landingCss).toMatch(/\.navGetStartedBtn\s*\{[^}]*color:\s*#11110F/)
+      expect(landingCss).toMatch(/\.landingSearchSubmitBtn:hover\s*\{[^}]*color:\s*#11110F/)
     })
 
     it('ensures all views contain a main landmark container with id="main-content"', () => {

@@ -89,17 +89,27 @@
   padding: 12px 24px;
   border-radius: 8px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   background: var(--terracotta);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: background-color .15s ease, border-color .15s ease;
+  color: #11110F;
+  border: 1px solid rgba(17, 17, 15, 0.2);
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
   cursor: pointer;
   text-decoration: none;
 }
 .landingCtaPrimary:hover {
-  background: #b55d3a;
-  border-color: rgba(255, 255, 255, 0.25);
+  background: #d47651;
+  color: #11110F;
+  border-color: rgba(17, 17, 15, 0.3);
+}
+.landingCtaPrimary:active {
+  background: #c4643f;
+  color: #11110F;
+  border-color: rgba(17, 17, 15, 0.35);
+}
+.landingCtaPrimary:disabled {
+  opacity: .56;
+  cursor: not-allowed;
 }
 .landingCtaSecondary {
   display: inline-flex;
@@ -177,7 +187,11 @@
 }
 .landingSearchSubmitBtn:hover {
   background: var(--terracotta);
-  color: #fff;
+  color: #11110F;
+}
+.landingSearchSubmitBtn:active {
+  background: #c4643f;
+  color: #11110F;
 }
 .landingSearchError {
   margin: 0;
@@ -788,17 +802,27 @@
   gap: 8px;
   padding: 12px 24px;
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 8px;
   background: var(--terracotta);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #11110F;
+  border: 1px solid rgba(17, 17, 15, 0.2);
   cursor: pointer;
-  transition: background-color .15s ease, border-color .15s ease;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 .finalCtaPrimary:hover {
-  background: #b55d3a;
-  border-color: rgba(255, 255, 255, 0.25);
+  background: #d47651;
+  color: #11110F;
+  border-color: rgba(17, 17, 15, 0.3);
+}
+.finalCtaPrimary:active {
+  background: #c4643f;
+  color: #11110F;
+  border-color: rgba(17, 17, 15, 0.35);
+}
+.finalCtaPrimary:disabled {
+  opacity: .56;
+  cursor: not-allowed;
 }
 .finalCtaSecondary {
   display: inline-flex;
@@ -1189,11 +1213,11 @@
 .navGetStartedBtn {
   padding: 8px 16px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   border-radius: 8px;
   background: var(--terracotta);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #11110F;
+  border: 1px solid rgba(17, 17, 15, 0.2);
   box-shadow: 0 4px 14px rgba(201, 106, 69, 0.3);
   transition: all .15s ease;
   cursor: pointer;
@@ -1206,6 +1230,15 @@
 }
 .navGetStartedBtn:hover {
   background: #d47651;
+  color: #11110F;
+}
+.navGetStartedBtn:active {
+  background: #c4643f;
+  color: #11110F;
+}
+.navGetStartedBtn:disabled {
+  opacity: .56;
+  cursor: not-allowed;
 }
 .loginPromptSecondaryActions {
   display: flex;

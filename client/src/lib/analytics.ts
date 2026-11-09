@@ -18,7 +18,11 @@ export function buildInsights(data: Dashboard) {
   const stale = repos.filter((repo) => repo.status === 'stale').length
   const active = repos.filter((repo) => repo.status === 'active').length
 
-  if (contributions.currentStreak >= 7) {
+  const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
+
+  if (eventsUnavailable || contributions.activeDays == null) {
+    insights.push(`Contribution cadence is currently unobserved due to limited public events data.`)
+  } else if (contributions.currentStreak >= 7) {
     insights.push(`${user.name || `@${user.login}`} currently has a ${contributions.currentStreak}-day contribution streak.`)
   } else {
     insights.push(`${user.name || `@${user.login}`} has ${contributions.activeDays} active contribution days in the last ${data.estimated ? '90 days (estimated from public events)' : 'year'}.`)
@@ -26,10 +30,12 @@ export function buildInsights(data: Dashboard) {
   if (languages[0]) {
     insights.push(`${languages[0].name} leads by code volume across the analyzed repositories.`)
   }
-  if (score.breakdown.collaboration >= 65) {
-    insights.push(`Collaboration is a strong signal, with ${score.raw.prs} pull requests, ${score.raw.issues} issues and ${score.raw.reviews} reviews in the contribution window.`)
-  } else {
-    insights.push(`Collaboration is currently lighter than coding activity, so issues and pull requests are a useful growth area.`)
+  if (score.breakdown.collaboration != null) {
+    if (score.breakdown.collaboration >= 65) {
+      insights.push(`Collaboration is a strong signal, with ${score.raw.prs ?? 0} pull requests, ${score.raw.issues ?? 0} issues and ${score.raw.reviews ?? 0} reviews in the contribution window.`)
+    } else {
+      insights.push(`Collaboration is currently lighter than coding activity, so issues and pull requests are a useful growth area.`)
+    }
   }
   if (stale) {
     insights.push(`${stale} repositories are stale; ${active} are active in the last 30 days.`)
@@ -59,7 +65,10 @@ export function relativeDays(value: string | null) {
   return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000))
 }
 
-export const compactNumber = (value: number) => new Intl.NumberFormat('en', { notation: value > 999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
+export const compactNumber = (value: number | null | undefined) => {
+  if (value == null) return '—'
+  return new Intl.NumberFormat('en', { notation: value > 999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
+}
 export const formatDate = (value: string | null) => value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
 
 export function eventText(event: Dashboard['events'][number]) {

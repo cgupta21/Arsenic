@@ -20,26 +20,43 @@ function pick(seed, arr) {
 // Signal scoring (all values normalised to 0–100)
 // ---------------------------------------------------------------------------
 
-function scoreSignals({ user, repos, languages, contributions, score, timing }) {
-  const totalStars    = repos.reduce((s, r) => s + (r.stargazers_count || 0), 0)
-  const totalForks    = repos.reduce((f, r) => f + (r.forks_count    || 0), 0)
+function scoreSignals({ user = {}, repos = [], languages = [], contributions = {}, score = {}, timing = {}, observationWindowDays, dataQuality }) {
+  const windowDays = Math.max(1, Number(observationWindowDays) || Number(score?.observationWindowDays) || Number(score?.raw?.observationWindowDays) || 365)
+  const effectiveWindow = (dataQuality?.isTruncated && typeof dataQuality?.observedDaysCount === 'number')
+    ? Math.min(windowDays, Math.max(14, dataQuality.observedDaysCount))
+    : (score?.effectiveWindowDays || windowDays)
+
+  const eventsUnavailable = Boolean(dataQuality?.eventsUnavailable)
+  const isTruncated = Boolean(dataQuality?.isTruncated)
+  const collaborationUnavailable = eventsUnavailable || isTruncated || score?.breakdown?.collaboration == null
+
+  const safeRepos     = Array.isArray(repos) ? repos : []
+  const safeLangs     = Array.isArray(languages) ? languages : []
+  const totalStars    = safeRepos.reduce((s, r) => s + (r.stargazers_count || 0), 0)
+  const totalForks    = safeRepos.reduce((f, r) => f + (r.forks_count    || 0), 0)
   const followers     = user.followers ?? 0
-  const totalContrib  = contributions.total      || 0
-  const activeDays    = contributions.activeDays || 0
-  const longestStreak = contributions.longestStreak || 0
-  const currentStreak = contributions.currentStreak || 0
-  const prs           = score.raw?.prs     || 0
-  const issues        = score.raw?.issues  || 0
-  const reviews       = score.raw?.reviews || 0
-  const totalCollab   = prs + issues + reviews
-  const totalRepos    = repos.length || 0
-  const activeRepos   = repos.filter(r => r.status === 'active').length
-  const staleRepos    = repos.filter(r => r.status === 'stale').length
-  const archivedRepos = repos.filter(r => r.status === 'archived').length
-  const topLangs      = languages.slice(0, 3).map(l => l.name)
-  const langConc      = topLangs.length && languages.length
-    ? (languages[0].size / languages.reduce((s, l) => s + l.size, 0)) * 100
+  const totalContrib  = eventsUnavailable ? null : (contributions.total ?? score?.raw?.totalContributions ?? 0)
+  const activeDays    = eventsUnavailable ? null : (contributions.activeDays ?? score?.raw?.activeDays ?? 0)
+  const longestStreak = eventsUnavailable ? 0 : (contributions.longestStreak ?? score?.raw?.longestStreak ?? 0)
+  const currentStreak = eventsUnavailable ? 0 : (contributions.currentStreak ?? score?.raw?.currentStreak ?? 0)
+  const prs           = eventsUnavailable ? null : (score?.raw?.prs ?? 0)
+  const issues        = eventsUnavailable ? null : (score?.raw?.issues ?? 0)
+  const reviews       = eventsUnavailable ? null : (score?.raw?.reviews ?? 0)
+  const totalCollab   = (eventsUnavailable || collaborationUnavailable) ? null : ((prs || 0) + (issues || 0) + (reviews || 0))
+  const totalRepos    = safeRepos.length || 0
+  const activeRepos   = safeRepos.filter(r => r.status === 'active').length
+  const staleRepos    = safeRepos.filter(r => r.status === 'stale').length
+  const archivedRepos = safeRepos.filter(r => r.status === 'archived').length
+  const topLangs      = safeLangs.slice(0, 3).map(l => l.name)
+  const langConc      = topLangs.length && safeLangs.length
+    ? (safeLangs[0].size / safeLangs.reduce((s, l) => s + l.size, 0)) * 100
     : 0
+
+  const targetContrib = Math.max(1, (150 / 365) * effectiveWindow)
+  const targetActive = Math.max(1, (120 / 365) * effectiveWindow)
+  const targetLongest = Math.max(1, (60 / 365) * effectiveWindow)
+  const targetCurrent = Math.max(1, (30 / 365) * effectiveWindow)
+  const targetCollab = Math.max(1, (40 / 365) * effectiveWindow)
 
   // Normalised signal strengths
   const signals = {
@@ -48,14 +65,14 @@ function scoreSignals({ user, repos, languages, contributions, score, timing }) 
       (Math.log1p(totalForks)    / Math.log1p(100000)) * 30 +
       (Math.log1p(followers)     / Math.log1p(10000))  * 20
     ),
-    // Normalise against 150 so a moderate contributor (100+ commits) ranks meaningfully
-    contributions: Math.min(100, (totalContrib / 150) * 100),
-    consistency: Math.min(100,
-      (activeDays    / 120) * 50 +
-      (longestStreak / 60)  * 30 +
-      (currentStreak / 30)  * 20
+    // Normalise against targetContrib so a moderate contributor ranks meaningfully
+    contributions: eventsUnavailable || totalContrib == null ? 0 : Math.min(100, (totalContrib / targetContrib) * 100),
+    consistency: eventsUnavailable || activeDays == null ? 0 : Math.min(100,
+      (activeDays    / targetActive)  * 50 +
+      (longestStreak / targetLongest) * 30 +
+      (currentStreak / targetCurrent) * 20
     ),
-    collaboration: Math.min(100, (totalCollab / 40) * 100),
+    collaboration: collaborationUnavailable || totalCollab == null ? 0 : Math.min(100, (totalCollab / targetCollab) * 100),
     repositories: Math.min(100,
       totalRepos > 0
         ? ((activeRepos / totalRepos) * 60) + Math.min(40, (totalRepos / 20) * 40)
@@ -73,7 +90,8 @@ function scoreSignals({ user, repos, languages, contributions, score, timing }) 
     signals,
     raw: { totalStars, totalForks, followers, totalContrib, activeDays,
            longestStreak, currentStreak, prs, issues, reviews, totalCollab,
-           totalRepos, activeRepos, staleRepos, archivedRepos, topLangs, langConc }
+           totalRepos, activeRepos, staleRepos, archivedRepos, topLangs, langConc,
+           eventsUnavailable, collaborationUnavailable }
   }
 }
 
@@ -101,8 +119,9 @@ function insightImpact(raw, subject) {
 }
 
 function insightContributions(raw, subject) {
+  if (raw.eventsUnavailable) return null
   const { totalContrib } = raw
-  if (totalContrib === 0) return null
+  if (totalContrib == null || totalContrib === 0) return null
   return pick(totalContrib, [
     `${subject} has logged ${fmt(totalContrib)} contributions over the analyzed window, pointing to active development.`,
     `A contribution count of ${fmt(totalContrib)} anchors ${subject}'s activity record.`,
@@ -111,8 +130,9 @@ function insightContributions(raw, subject) {
 }
 
 function insightConsistency(raw, subject) {
+  if (raw.eventsUnavailable) return null
   const { activeDays, longestStreak, currentStreak } = raw
-  if (activeDays === 0 && longestStreak === 0) return null
+  if (activeDays == null || (activeDays === 0 && longestStreak === 0)) return null
   const streakNote = currentStreak > 0
     ? `a current streak of ${currentStreak} days`
     : longestStreak > 0 ? `a peak streak of ${longestStreak} days` : null
@@ -127,8 +147,9 @@ function insightConsistency(raw, subject) {
 }
 
 function insightCollaboration(raw, subject) {
+  if (raw.eventsUnavailable || raw.collaborationUnavailable) return null
   const { prs, issues, reviews, totalCollab } = raw
-  if (totalCollab === 0) return null
+  if (totalCollab == null || totalCollab === 0) return null
   const breakdown = []
   if (prs     > 0) breakdown.push(`${prs} PR${prs !== 1 ? 's' : ''}`)
   if (issues  > 0) breakdown.push(`${issues} issue${issues !== 1 ? 's' : ''}`)
@@ -142,8 +163,10 @@ function insightCollaboration(raw, subject) {
 }
 
 function insightNoCollaboration(raw, subject) {
+  if (raw.eventsUnavailable || raw.collaborationUnavailable) return null
   // Useful contrast insight when collaboration is zero but contributions exist
   const { totalCollab, totalContrib } = raw
+  if (totalCollab == null || totalContrib == null) return null
   if (totalCollab > 0 || totalContrib === 0) return null
   return pick(totalContrib, [
     `No public pull-request, issue, or review activity is visible in the analyzed data.`,
@@ -215,7 +238,9 @@ function insightTiming(raw, timing, subject) {
 }
 
 function insightNoActivity(raw, subject) {
+  if (raw.eventsUnavailable) return null
   const { totalContrib, activeDays } = raw
+  if (totalContrib == null || activeDays == null) return null
   if (totalContrib > 0 || activeDays > 0) return null
   return `No contribution activity was recorded in the analyzed window for ${subject}; the profile's visibility comes primarily from repository adoption rather than recent commits.`
 }
@@ -224,26 +249,24 @@ function insightNoActivity(raw, subject) {
 // Score synthesis (no raw metrics repeated)
 // ---------------------------------------------------------------------------
 
-function synthesiseScore(scoreData, usedSignals, subject) {
-  const { score, breakdown } = scoreData
-  const { consistency: cons, collaboration: coll, impact: imp } = breakdown
+function synthesiseScore(scoreData = {}, usedSignals, subject) {
+  const score = scoreData?.score
+  const breakdown = scoreData?.breakdown || {}
+  const cons = breakdown.consistency
+  const coll = breakdown.collaboration
+  const imp = breakdown.impact ?? 0
 
   const dims = []
-  if (!usedSignals.has('impact'))       dims.push(imp  >= 50 ? 'strong impact'      : imp  >= 20 ? 'moderate impact'      : 'limited impact')
-  if (!usedSignals.has('consistency'))  dims.push(cons >= 50 ? 'strong consistency' : cons >= 20 ? 'moderate consistency' : 'limited consistency')
-  if (!usedSignals.has('collaboration'))dims.push(coll >= 50 ? 'robust collaboration': coll >= 20 ? 'moderate collaboration': 'limited collaboration')
+  if (!usedSignals.has('impact') && imp != null) dims.push(imp >= 50 ? 'strong impact' : imp >= 20 ? 'moderate impact' : 'limited impact')
+  if (!usedSignals.has('consistency') && cons != null) dims.push(cons >= 50 ? 'strong consistency' : cons >= 20 ? 'moderate consistency' : 'limited consistency')
+  if (!usedSignals.has('collaboration') && coll != null) dims.push(coll >= 50 ? 'robust collaboration' : coll >= 20 ? 'moderate collaboration' : 'limited collaboration')
 
-  // Which dimension is dominant?
-  const dominant =
-    imp  > coll && imp  > cons ? 'impact'
-    : cons > coll             ? 'consistency'
-    : coll > 0               ? 'collaboration'
-    : 'impact'
-
-  const usedAny = usedSignals.size > 0
+  if (score == null) {
+    if (dims.length === 0) return `${subject}'s public profile displays verified repository and code metrics.`
+    return `${subject}'s profile is characterized by ${dims.join(', ')} across verified repository metrics.`
+  }
 
   if (dims.length === 0) {
-    // All dimensions already discussed — very brief closing
     return `The combined developer score is ${score}/100.`
   }
 
@@ -259,10 +282,16 @@ function synthesiseScore(scoreData, usedSignals, subject) {
 // ---------------------------------------------------------------------------
 
 export function generateDeveloperSummary(data) {
-  const { user, repos, languages, contributions, score, timing } = data
-  const subject = user.name?.trim() || `@${user.login}`
+  const { user = {}, repos = [], languages = [], contributions = {}, score = {}, timing = {} } = data || {}
+  const subject = user.name?.trim() || (user.login ? `@${user.login}` : 'Developer')
 
-  const { signals, raw } = scoreSignals({ user, repos, languages, contributions, score, timing })
+  const dataQuality = data?.dataQuality || data?.contributions?.dataQuality || null
+  const observationWindowDays = dataQuality?.observationWindowDays ||
+    data?.score?.raw?.observationWindowDays ||
+    data?.score?.observationWindowDays ||
+    (data?.estimated ? 90 : 365)
+
+  const { signals, raw } = scoreSignals({ user, repos, languages, contributions, score, timing, observationWindowDays, dataQuality })
 
   // Rank signals (descending strength), exclude zero-value
   const ranked = Object.entries(signals)
@@ -285,7 +314,7 @@ export function generateDeveloperSummary(data) {
       case 'impact':
         text = insightImpact(raw, subject)
         // If no recent activity, add a contrast note as part of the same signal slot
-        if (text) {
+        if (text && !raw.eventsUnavailable) {
           const contrast = insightNoActivity(raw, subject)
           if (contrast) text = text + '\n\n' + contrast
         }
@@ -317,7 +346,7 @@ export function generateDeveloperSummary(data) {
   }
 
   // If no collaboration data was consumed and contributions were shown, add contrast note
-  if (!usedSignals.has('collaboration') && usedSignals.has('contributions')) {
+  if (!raw.eventsUnavailable && !usedSignals.has('collaboration') && usedSignals.has('contributions')) {
     const noCollab = insightNoCollaboration(raw, subject)
     if (noCollab && insights.length < MAX_INSIGHTS + 1) {
       insights.push(noCollab)

@@ -45,6 +45,7 @@ export type ContributionDay = {
   contributionCount: number
   contributionLevel?: string
   weekday?: number
+  isObserved?: boolean
 }
 
 export type Dashboard = {
@@ -53,28 +54,45 @@ export type Dashboard = {
   events: ActivityEvent[]
   contributions: {
     days: ContributionDay[]
-    total: number
-    activeDays: number
+    total: number | null
+    activeDays: number | null
     currentStreak: number
     longestStreak: number
     privateContributionCount: number
   }
+  dataQuality?: {
+    observationWindowDays: number
+    isEstimated: boolean
+    isTruncated: boolean
+    eventsUnavailable?: boolean
+    oldestEventDate: string | null
+    eventCount: number
+    observedDaysCount?: number
+  }
+  observationWindowDays?: number
   languages: { name: string; size: number; pct: number; color: string | null }[]
   timing: { commitsSampled: number; hours: number[]; weekdays: number[]; timezone?: string }
   score: {
-    score: number
-    breakdown: { consistency: number; collaboration: number; impact: number }
+    score: number | null
+    scoringModel?: 'three_pillar' | 'two_pillar_renormalized' | 'unavailable'
+    breakdown: {
+      consistency: number | null
+      collaboration: number | null
+      impact: number
+    }
     raw: {
-      activeDays: number
-      totalContributions: number
-      prs: number
-      issues: number
-      reviews: number
+      activeDays: number | null
+      totalContributions: number | null
+      prs: number | null
+      issues: number | null
+      reviews: number | null
       stars: number
       forks: number
       currentStreak: number
       longestStreak: number
       timingSamples: number
+      observationWindowDays?: number
+      targetActiveDays?: number
     }
   }
   authenticated: boolean

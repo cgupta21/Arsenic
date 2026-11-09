@@ -181,6 +181,21 @@ const summaryLimiter = rateLimit({
 })
 const SUMMARY_DAILY_CAP = Number(process.env.SUMMARY_DAILY_CAP || 200)
 const summaryCache = new Map()
+
+function setSummaryCache(key, summary) {
+  const now = Date.now()
+  if (summaryCache.size > 200) {
+    for (const [k, v] of summaryCache) {
+      if (v.expires <= now) summaryCache.delete(k)
+    }
+  }
+  if (summaryCache.size > 200) {
+    const oldestKey = summaryCache.keys().next().value
+    if (oldestKey) summaryCache.delete(oldestKey)
+  }
+  summaryCache.set(key, { summary, expires: now + 60 * 60 * 1000 })
+}
+
 let summaryDay = new Date().toISOString().slice(0, 10)
 let summaryCount = 0
 
@@ -198,11 +213,21 @@ function clone(value) {
   return value == null ? value : JSON.parse(JSON.stringify(value))
 }
 
-function cacheKey(username, privateScope) {
-  return `${username.toLowerCase()}::${privateScope ? 'private' : 'public'}`
+function cacheKey(username, tierOrScope = 'public') {
+  const normUser = String(username || '').toLowerCase()
+  if (tierOrScope === true || tierOrScope === 'private') {
+    return `${normUser}::private`
+  }
+  if (tierOrScope === 'verified') {
+    return `${normUser}::verified`
+  }
+  if (tierOrScope === 'estimated') {
+    return `${normUser}::estimated`
+  }
+  return `${normUser}::public`
 }
 
-async function cachedDashboard(key, producer) {
+async function cachedDashboard(key, producer, onStoreKey = null) {
   const existing = cache.get(key)
   if (existing && existing.expires > Date.now()) {
     const hit = clone(existing.value)
@@ -217,7 +242,8 @@ async function cachedDashboard(key, producer) {
 
   const promise = producer()
     .then((value) => {
-      cache.set(key, { value: clone(value), expires: Date.now() + TTL })
+      const storeKey = (typeof onStoreKey === 'function' ? onStoreKey(value) : null) || key
+      cache.set(storeKey, { value: clone(value), expires: Date.now() + TTL })
       return value
     })
     .finally(() => inflight.delete(key))
@@ -439,34 +465,81 @@ async function fetchGraphQLBundle(username, authToken) {
 
 // Without a token there is no GraphQL contribution calendar, so approximate one from the public
 // events feed (GitHub only keeps roughly 90 days / 300 events). The UI labels this as estimated.
-function contributionsFromEvents(events) {
+function contributionsFromEvents(events = [], options = {}) {
+  const eventsUnavailable = Boolean(options.eventsUnavailable || events === null)
+  const windowDays = 90
   const counts = new Map()
   let prs = 0
   let issues = 0
   let reviews = 0
-  for (const event of events || []) {
-    const day = String(event.created_at || '').slice(0, 10)
-    if (!day) continue
-    const weight = event.type === 'PushEvent' ? Math.max(1, event.payload?.commits?.length || event.payload?.size || 1) : 1
-    counts.set(day, (counts.get(day) || 0) + weight)
-    if (event.type === 'PullRequestEvent') prs += 1
-    if (event.type === 'IssuesEvent') issues += 1
-    if (event.type === 'PullRequestReviewEvent') reviews += 1
+  let oldestTimestamp = null
+
+  const validEvents = Array.isArray(events) ? events : []
+
+  if (!eventsUnavailable) {
+    for (const event of validEvents) {
+      const rawDate = event?.created_at
+      if (!rawDate) continue
+      const dateObj = new Date(rawDate)
+      if (isNaN(dateObj.getTime())) continue
+
+      const day = dateObj.toISOString().slice(0, 10)
+      const time = dateObj.getTime()
+      if (oldestTimestamp === null || time < oldestTimestamp) {
+        oldestTimestamp = time
+      }
+
+      const weight = event.type === 'PushEvent' ? Math.max(1, event.payload?.commits?.length || event.payload?.size || 1) : 1
+      counts.set(day, (counts.get(day) || 0) + weight)
+      if (event.type === 'PullRequestEvent') prs += 1
+      if (event.type === 'IssuesEvent') issues += 1
+      if (event.type === 'PullRequestReviewEvent') reviews += 1
+    }
   }
-  const contributionDays = []
+
+  const oldestEventDate = oldestTimestamp ? new Date(oldestTimestamp).toISOString().slice(0, 10) : null
   const today = new Date()
-  for (let offset = 89; offset >= 0; offset -= 1) {
+  const cutoffDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (windowDays - 1)))
+  const cutoffIso = cutoffDate.toISOString().slice(0, 10)
+
+  // If we fetched the maximum page capacity (e.g. 100 or 200 events) and the oldest event is newer than the 90-day cutoff,
+  // then earlier days were not observed due to GitHub event pagination limits.
+  const isTruncated = eventsUnavailable
+    ? true
+    : ((validEvents.length === 100 || validEvents.length >= 200) && oldestEventDate !== null && oldestEventDate > cutoffIso)
+
+  const contributionDays = []
+  for (let offset = windowDays - 1; offset >= 0; offset -= 1) {
     const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - offset))
     const date = d.toISOString().slice(0, 10)
-    contributionDays.push({ date, contributionCount: counts.get(date) || 0, weekday: d.getUTCDay() })
+    const isObserved = !eventsUnavailable && (!isTruncated || !oldestEventDate || date >= oldestEventDate)
+    contributionDays.push({
+      date,
+      contributionCount: counts.get(date) || 0,
+      weekday: d.getUTCDay(),
+      isObserved
+    })
   }
-  const total = contributionDays.reduce((sum, day) => sum + day.contributionCount, 0)
+
+  const observedDays = contributionDays.filter((d) => d.isObserved)
+  const observedDaysCount = eventsUnavailable ? 0 : (observedDays.length || 1)
+  const total = eventsUnavailable ? null : contributionDays.reduce((sum, day) => sum + day.contributionCount, 0)
+
   return {
-    totalPullRequestContributions: prs,
-    totalIssueContributions: issues,
-    totalPullRequestReviewContributions: reviews,
+    totalPullRequestContributions: eventsUnavailable ? null : prs,
+    totalIssueContributions: eventsUnavailable ? null : issues,
+    totalPullRequestReviewContributions: eventsUnavailable ? null : reviews,
     restrictedContributionsCount: 0,
-    contributionCalendar: { totalContributions: total, weeks: [{ contributionDays }] }
+    contributionCalendar: { totalContributions: total, weeks: [{ contributionDays }] },
+    dataQuality: {
+      observationWindowDays: windowDays,
+      isEstimated: true,
+      isTruncated,
+      eventsUnavailable,
+      oldestEventDate,
+      eventCount: validEvents.length,
+      observedDaysCount
+    }
   }
 }
 
@@ -474,13 +547,15 @@ async function fetchPublicBundle(username, authToken) {
   const [userRes, reposRes, eventsRes] = await Promise.all([
     githubRest(`/users/${encodeURIComponent(username)}`, authToken),
     githubRest(`/users/${encodeURIComponent(username)}/repos?per_page=100&sort=updated`, authToken),
-    githubRest(`/users/${encodeURIComponent(username)}/events/public?per_page=100`, authToken).catch(() => ({ body: [], rate: null }))
+    githubRest(`/users/${encodeURIComponent(username)}/events/public?per_page=100`, authToken)
+      .catch((err) => ({ body: null, rate: null, error: err }))
   ])
 
   const user = userRes.body
   const userRate = userRes.rate
   const repos = Array.isArray(reposRes.body) ? reposRes.body : []
   const reposRate = reposRes.rate
+  const eventsFailed = eventsRes.body === null
   const events = Array.isArray(eventsRes.body) ? eventsRes.body : []
   const eventsRate = eventsRes.rate
 
@@ -497,11 +572,32 @@ async function fetchPublicBundle(username, authToken) {
   const allRepos = pages.flat()
   const recentRepos = allRepos.filter((repo) => !repo.fork).slice(0, 250)
 
+  // Bounded public events pagination (at most page 2, up to 200 events total)
+  const allEvents = [...events]
+  if (!eventsFailed && events.length === 100) {
+    const oldestP1 = events[events.length - 1]?.created_at
+    const oldestP1Time = oldestP1 ? new Date(oldestP1).getTime() : 0
+    const ninetyDaysAgo = Date.now() - 90 * 86400000
+    if (!isNaN(oldestP1Time) && oldestP1Time > ninetyDaysAgo) {
+      try {
+        const { body: nextEvents } = await githubRest(
+          `/users/${encodeURIComponent(username)}/events/public?per_page=100&page=2`,
+          authToken
+        )
+        if (Array.isArray(nextEvents)) {
+          allEvents.push(...nextEvents)
+        }
+      } catch {
+        // Page 2 failure is non-fatal
+      }
+    }
+  }
+
   return {
     user,
     repos: recentRepos,
-    events,
-    contributions: contributionsFromEvents(events),
+    events: eventsFailed ? [] : allEvents,
+    contributions: contributionsFromEvents(eventsFailed ? null : allEvents, { eventsUnavailable: eventsFailed }),
     estimated: true,
     graphqlRate: null,
     restRate: eventsRate?.remaining ?? reposRate?.remaining ?? userRate?.remaining ?? null,
@@ -635,20 +731,44 @@ function calculateStreaks(days, today) {
   return { current, longest }
 }
 
-function calculateScore({ contributions, repos, followers, timing }) {
+function calculateScore({ contributions, repos, followers, timing, observationWindowDays = 365, dataQuality = null }) {
+  const eventsUnavailable = Boolean(dataQuality?.eventsUnavailable)
   const days = flattenCalendar(contributions?.contributionCalendar)
-  const activeDays = days.filter((day) => day.contributionCount > 0).length
-  const totalContributions = contributions?.contributionCalendar?.totalContributions || 0
-  const prs = contributions?.totalPullRequestContributions || 0
-  const issues = contributions?.totalIssueContributions || 0
-  const reviews = contributions?.totalPullRequestReviewContributions || 0
+  const activeDays = eventsUnavailable ? null : days.filter((day) => day.contributionCount > 0).length
+  const totalContributions = eventsUnavailable ? null : (contributions?.contributionCalendar?.totalContributions ?? 0)
+  const prs = eventsUnavailable ? null : (contributions?.totalPullRequestContributions ?? 0)
+  const issues = eventsUnavailable ? null : (contributions?.totalIssueContributions ?? 0)
+  const reviews = eventsUnavailable ? null : (contributions?.totalPullRequestReviewContributions ?? 0)
   const stars = repos.reduce((sum, repo) => sum + Number(repo.stargazerCount ?? repo.stargazers_count ?? 0), 0)
   const forks = repos.reduce((sum, repo) => sum + Number(repo.forkCount ?? repo.forks_count ?? 0), 0)
-  const result = calculateScoreModel({ activeDays, prs, issues, reviews, stars, forks, followers })
-  const streaks = calculateStreaks(days)
+  const result = calculateScoreModel({
+    activeDays,
+    prs,
+    issues,
+    reviews,
+    stars,
+    forks,
+    followers,
+    observationWindowDays,
+    dataQuality
+  })
+  const streaks = eventsUnavailable ? { current: 0, longest: 0 } : calculateStreaks(days)
   return {
     ...result,
-    raw: { activeDays, totalContributions, prs, issues, reviews, stars, forks, currentStreak: streaks.current, longestStreak: streaks.longest, timingSamples: timing.commitsSampled }
+    raw: {
+      activeDays,
+      totalContributions,
+      prs,
+      issues,
+      reviews,
+      stars,
+      forks,
+      currentStreak: streaks.current,
+      longestStreak: streaks.longest,
+      timingSamples: timing?.commitsSampled || 0,
+      observationWindowDays: result.observationWindowDays,
+      targetActiveDays: result.targetActiveDays
+    }
   }
 }
 
@@ -717,7 +837,8 @@ async function buildDashboard(username, authToken, includePrivate = false) {
     throw error
   }
 
-  const key = cacheKey(normalized, includePrivate)
+  const requestedTier = includePrivate ? 'private' : (authToken ? 'verified' : 'estimated')
+  const key = cacheKey(normalized, requestedTier)
   return cachedDashboard(key, async () => {
     let bundle = null
     if (authToken) {
@@ -741,11 +862,30 @@ async function buildDashboard(username, authToken, includePrivate = false) {
     const days = flattenCalendar(bundle.contributions?.contributionCalendar)
     const streaks = calculateStreaks(days)
     const languages = aggregateLanguages(bundle.repos || [])
+
+    const isEstimated = Boolean(bundle.estimated)
+    const observationWindowDays = isEstimated ? 90 : 365
+    const dataQuality = bundle.contributions?.dataQuality || {
+      observationWindowDays,
+      isEstimated,
+      isTruncated: false,
+      eventsUnavailable: false,
+      oldestEventDate: null,
+      eventCount: bundle.events?.length || 0,
+      observedDaysCount: days.length
+    }
+
+    const eventsUnavailable = Boolean(dataQuality.eventsUnavailable)
+    const activeDays = eventsUnavailable ? null : days.filter((day) => day.contributionCount > 0).length
+    const totalContrib = eventsUnavailable ? null : (bundle.contributions?.contributionCalendar?.totalContributions || 0)
+
     const score = calculateScore({
       contributions: bundle.contributions,
       repos,
       followers: user.followers || 0,
-      timing
+      timing,
+      observationWindowDays,
+      dataQuality
     })
 
     const repoHealth = repos.map((repo) => {
@@ -780,17 +920,19 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       events: bundle.events || [],
       contributions: {
         days,
-        total: bundle.contributions?.contributionCalendar?.totalContributions || 0,
-        activeDays: days.filter((day) => day.contributionCount > 0).length,
-        currentStreak: streaks.current,
-        longestStreak: streaks.longest,
+        total: totalContrib,
+        activeDays,
+        currentStreak: eventsUnavailable ? 0 : streaks.current,
+        longestStreak: eventsUnavailable ? 0 : streaks.longest,
         privateContributionCount
       },
+      dataQuality,
+      observationWindowDays,
       languages,
       timing,
       score,
       authenticated: Boolean(authToken),
-      estimated: Boolean(bundle.estimated),
+      estimated: isEstimated,
       privateContributions: Boolean(includePrivate),
       privateContributionsStatus,
       api: {
@@ -801,6 +943,10 @@ async function buildDashboard(username, authToken, includePrivate = false) {
         restRemaining: bundle.restRate ?? null
       }
     }
+  }, (result) => {
+    if (includePrivate) return cacheKey(normalized, 'private')
+    if (result.estimated) return cacheKey(normalized, 'estimated')
+    return cacheKey(normalized, 'verified')
   })
 }
 
@@ -1190,7 +1336,10 @@ app.post('/api/summary/:username', summaryLimiter, verifySameOriginOrAllowed, as
   if (!isValidGitHubUsername(username)) {
     return res.status(400).json({ error: 'Invalid GitHub username.' })
   }
-  const summaryKey = cacheKey(username, userCanSeePrivate(req, username))
+  const isPrivate = userCanSeePrivate(req, username)
+  const token = sessionToken(req, username)
+  const initialTier = isPrivate ? 'private' : (token ? 'verified' : 'estimated')
+  const summaryKey = cacheKey(username, initialTier)
   const cachedSummary = summaryCache.get(summaryKey)
   if (cachedSummary && cachedSummary.expires > Date.now()) {
     return res.json({ summary: cachedSummary.summary, model: 'deterministic-rules', cached: true })
@@ -1203,10 +1352,12 @@ app.post('/api/summary/:username', summaryLimiter, verifySameOriginOrAllowed, as
   }
 
   try {
-    const data = await buildDashboard(username, sessionToken(req, username), userCanSeePrivate(req, username))
+    const data = await buildDashboard(username, token, isPrivate)
     const text = generateDeveloperSummary(data)
     summaryCount += 1
-    summaryCache.set(summaryKey, { summary: text, expires: Date.now() + 60 * 60 * 1000 })
+    const actualTier = data.privateContributions ? 'private' : (data.estimated ? 'estimated' : 'verified')
+    const storeSummaryKey = cacheKey(username, actualTier)
+    setSummaryCache(storeSummaryKey, text)
     return res.json({ summary: text, model: 'deterministic-rules', cached: false })
   } catch (error) {
     if (error.status === 401) {
@@ -1679,7 +1830,16 @@ export {
   sessionToken,
   userCanSeePrivate,
   parseGrantedScopes,
-  isSelfUser
+  isSelfUser,
+  cacheKey,
+  cachedDashboard,
+  cache,
+  inflight,
+  summaryCache,
+  setSummaryCache,
+  contributionsFromEvents,
+  buildDashboard,
+  calculateScore
 }
 export default app
 

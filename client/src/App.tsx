@@ -1103,8 +1103,8 @@ function DashboardContent({
       </section>
 
       <section className="dashboardGrid">
-        <Card title="Score anatomy" icon={<Sparkles />} action={`Overall ${score.score}/100`}><ScoreBreakdown score={score} /></Card>
-        <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`}><ContributionHeatmap data={data} /></Card>
+        <Card title="Score anatomy" icon={<Sparkles />} action={score.score != null ? `Overall ${score.score}/100` : 'Score unavailable'}><ScoreBreakdown score={score} /></Card>
+        <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.contributions.activeDays != null ? (data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`) : 'Activity unobserved'}><ContributionHeatmap data={data} /></Card>
       </section>
 
       <section id="activity" className="dashboardGrid">
@@ -1177,8 +1177,8 @@ function DashboardContent({
         <div className="shareLayout">
           <div className="shareCard" ref={shareRef} id="share-card">
             <div className="shareBrand"><img src="/assets/arsenic-mark.svg" alt="" /><span>ARSENIC</span></div>
-            <div className="shareIdentity"><img src={user.avatar_url} alt="" crossOrigin="anonymous" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score}</strong></div>
-            <div className="shareGrid"><div><b>{compactNumber(data.contributions.total)}</b><span>contributions</span></div><div><b>{score.breakdown.consistency}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
+            <div className="shareIdentity"><img src={user.avatar_url} alt="" crossOrigin="anonymous" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score != null ? score.score : '—'}</strong></div>
+            <div className="shareGrid"><div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div><div><b>{score.breakdown.consistency != null ? score.breakdown.consistency : '—'}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration != null ? score.breakdown.collaboration : '—'}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>
           <ExportButtons targetId="share-card" />

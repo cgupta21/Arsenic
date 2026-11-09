@@ -432,6 +432,7 @@
   background: #1d1c18;
 }
 .heatmapCell.lvl-0 { background: #22211c; }
+.heatmapCell.lvl-unobserved { background: rgba(255, 255, 255, 0.04); opacity: 0.6; }
 .heatmapCell.lvl-1 { background: rgba(135, 150, 106, 0.35); }
 .heatmapCell.lvl-2 { background: rgba(135, 150, 106, 0.65); }
 .heatmapCell.lvl-3 { background: var(--sage); }

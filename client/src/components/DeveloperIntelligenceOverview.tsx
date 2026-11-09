@@ -8,7 +8,8 @@ export interface DeveloperIntelligenceOverviewProps {
   loading?: boolean
 }
 
-function getHealthGrade(score: number): string {
+function getHealthGrade(score: number | null): string {
+  if (score == null) return 'Telemetry Partial'
   if (score >= 85) return 'Excellent Health'
   if (score >= 70) return 'Strong Health'
   if (score >= 50) return 'Moderate Health'
@@ -16,11 +17,12 @@ function getHealthGrade(score: number): string {
   return 'Low Activity'
 }
 
-function getDensityLevelClass(count: number): string {
-  if (count <= 0) return 'lvl-0'
-  if (count < 2) return 'lvl-1'
-  if (count < 5) return 'lvl-2'
-  if (count < 10) return 'lvl-3'
+function getDensityLevelClass(day: { contributionCount: number; isObserved?: boolean } | null, eventsUnavailable?: boolean): string {
+  if (eventsUnavailable || (day && day.isObserved === false)) return 'lvl-unobserved'
+  if (!day || day.contributionCount <= 0) return 'lvl-0'
+  if (day.contributionCount < 2) return 'lvl-1'
+  if (day.contributionCount < 5) return 'lvl-2'
+  if (day.contributionCount < 10) return 'lvl-3'
   return 'lvl-4'
 }
 
@@ -44,8 +46,13 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
     return score.raw?.stars ?? repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
   }, [score.raw?.stars, repos])
 
+  const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
+
   // Trend calculation comparing the last 28 days vs prior 28 days (4-week periods)
   const commitTrend = useMemo(() => {
+    if (eventsUnavailable || data.contributions.total == null) {
+      return { text: 'Telemetry unavailable', positive: false }
+    }
     if (!days.length) {
       return { text: 'No recent activity', positive: false }
     }
@@ -71,11 +78,18 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
       return { text: `${prs} PRs on record`, positive: false }
     }
     return { text: '0 recent contributions', positive: false }
-  }, [days, score.raw?.prs])
+  }, [days, score.raw?.prs, eventsUnavailable, data.contributions.total])
 
   // PR velocity calculated over weeks in contribution window
   const prVelocityData = useMemo(() => {
-    const prCount = score.raw?.prs ?? 0
+    if (eventsUnavailable || score.raw?.prs == null) {
+      return {
+        velocity: '—',
+        subtext: 'Telemetry unavailable',
+        positive: false,
+      }
+    }
+    const prCount = score.raw.prs
     const weeksCount = data.estimated
       ? 13 // ~90 days in public fallback mode
       : days.length > 0
@@ -104,7 +118,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
       subtext,
       positive,
     }
-  }, [score.raw?.prs, data.estimated, days.length])
+  }, [score.raw?.prs, data.estimated, days.length, eventsUnavailable])
 
   // Recent 64 days for the 16x4 desktop / 8x8 mobile density grid
   const recentDensityDays = useMemo(() => {
@@ -120,13 +134,14 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
 
   // Peak commit timing pattern
   const timingInfo = useMemo(() => {
+    if (eventsUnavailable) return 'Telemetry unobserved'
     const peak = topTiming(data)
     const sampled = data.timing?.commitsSampled ?? 0
     if (sampled > 0 && peak.hour !== undefined) {
       return `Peak: ${peak.hour.toString().padStart(2, '0')}:00 UTC · ${peak.weekday}`
     }
     return data.estimated ? 'Recent activity (~90 days)' : 'Last 16 weeks'
-  }, [data])
+  }, [data, eventsUnavailable])
 
   return (
     <div className="dashboardOverviewWrap">
@@ -164,22 +179,26 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
           <div className="previewScoreStrip">
             <div className="previewScoreMain">
               <div className="previewScoreValue" data-testid="overview-health-score">
-                {score.score}
+                {score.score != null ? score.score : '—'}
               </div>
               <div className="previewScoreMeta">
                 <div className="scoreGrade">{getHealthGrade(score.score)}</div>
                 <div className="scoreSubtext" data-testid="overview-score-breakdown">
-                  Consistency {score.breakdown.consistency}% • Collaboration{' '}
-                  {score.breakdown.collaboration}% • Impact {score.breakdown.impact}%
+                  Consistency {score.breakdown.consistency != null ? `${score.breakdown.consistency}%` : 'Unavailable'} • Collaboration{' '}
+                  {score.breakdown.collaboration != null ? `${score.breakdown.collaboration}%` : 'Unavailable'} • Impact {score.breakdown.impact}%
                 </div>
               </div>
             </div>
             <div className="previewScoreTags">
-              {score.breakdown.collaboration >= 60 || Number(prVelocityData.velocity) >= 2 ? (
+              {eventsUnavailable ? (
+                <span className="previewTag tagSand">
+                  <Sparkles size={12} aria-hidden="true" /> Telemetry Partial
+                </span>
+              ) : (score.breakdown.collaboration != null && score.breakdown.collaboration >= 60) || (prVelocityData.velocity !== '—' && Number(prVelocityData.velocity) >= 2) ? (
                 <span className="previewTag tagSage">
                   <CheckCircle2 size={12} aria-hidden="true" /> High Velocity
                 </span>
-              ) : score.breakdown.collaboration >= 35 ? (
+              ) : score.breakdown.collaboration != null && score.breakdown.collaboration >= 35 ? (
                 <span className="previewTag tagSage">
                   <CheckCircle2 size={12} aria-hidden="true" /> Active Collab
                 </span>
@@ -189,7 +208,17 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                 </span>
               )}
 
-              {data.contributions.currentStreak >= 7 || score.breakdown.consistency >= 75 ? (
+              {eventsUnavailable ? (
+                hasActiveRepos ? (
+                  <span className="previewTag tagSand">
+                    <GitBranch size={12} aria-hidden="true" /> Active Maintenance
+                  </span>
+                ) : (
+                  <span className="previewTag tagSand">
+                    <GitBranch size={12} aria-hidden="true" /> Clean Branching
+                  </span>
+                )
+              ) : data.contributions.currentStreak >= 7 || (score.breakdown.consistency != null && score.breakdown.consistency >= 75) ? (
                 <span className="previewTag tagSand">
                   <GitBranch size={12} aria-hidden="true" /> Steady Cadence
                 </span>
@@ -219,7 +248,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
           <div className="previewMetricsGrid">
             <div className="previewMetricItem" data-testid="metric-commits-prs">
               <span className="metricLabel">Commits & PRs</span>
-              <span className="metricVal">{data.contributions.total.toLocaleString()}</span>
+              <span className="metricVal">{data.contributions.total != null ? data.contributions.total.toLocaleString() : '—'}</span>
               <span className={`metricTrend ${commitTrend.positive ? 'positive' : ''}`}>
                 {commitTrend.text}
               </span>
@@ -228,15 +257,20 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
             <div className="previewMetricItem" data-testid="metric-active-streak">
               <span className="metricLabel">Active Streak</span>
               <span className="metricVal">
-                {data.contributions.currentStreak}{' '}
-                {data.contributions.currentStreak === 1 ? 'Day' : 'Days'}
+                {eventsUnavailable || data.contributions.activeDays == null
+                  ? '—'
+                  : `${data.contributions.currentStreak} ${data.contributions.currentStreak === 1 ? 'Day' : 'Days'}`}
               </span>
-              <span className="metricTrend">Longest: {data.contributions.longestStreak}d</span>
+              <span className="metricTrend">
+                {eventsUnavailable || data.contributions.activeDays == null
+                  ? 'Unobserved'
+                  : `Longest: ${data.contributions.longestStreak}d`}
+              </span>
             </div>
 
             <div className="previewMetricItem" data-testid="metric-pr-velocity">
               <span className="metricLabel">PR Velocity</span>
-              <span className="metricVal">{prVelocityData.velocity} / wk</span>
+              <span className="metricVal">{prVelocityData.velocity} {prVelocityData.velocity !== '—' ? '/ wk' : ''}</span>
               <span className={`metricTrend ${prVelocityData.positive ? 'positive' : ''}`}>
                 {prVelocityData.subtext}
               </span>
@@ -265,11 +299,13 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
               {recentDensityDays.map((day, idx) => (
                 <div
                   key={day ? day.date : `pad-${idx}`}
-                  className={`heatmapCell ${day ? getDensityLevelClass(day.contributionCount) : 'lvl-0'}`}
+                  className={`heatmapCell ${getDensityLevelClass(day, eventsUnavailable)}`}
                   title={
-                    day
-                      ? `${day.date}: ${day.contributionCount} contribution${day.contributionCount === 1 ? '' : 's'}`
-                      : 'No recorded activity'
+                    eventsUnavailable || (day && day.isObserved === false)
+                      ? `${day ? day.date : 'Unobserved'}: Activity unobserved`
+                      : day
+                        ? `${day.date}: ${day.contributionCount} contribution${day.contributionCount === 1 ? '' : 's'}`
+                        : 'No recorded activity'
                   }
                 />
               ))}

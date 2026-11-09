@@ -13,8 +13,8 @@ describe('Arsenic score model', () => {
   it('rewards consistency, collaboration and impact', () => {
     const low = calculateScore({ activeDays: 4, prs: 0, issues: 0, reviews: 0, stars: 0, forks: 0, followers: 0 })
     const high = calculateScore({ activeDays: 110, prs: 25, issues: 18, reviews: 12, stars: 500, forks: 80, followers: 400 })
-    expect(high.score).toBeGreaterThan(low.score)
-    expect(high.breakdown.collaboration).toBeGreaterThan(low.breakdown.collaboration)
+    expect(high.score!).toBeGreaterThan(low.score!)
+    expect(high.breakdown.collaboration!).toBeGreaterThan(low.breakdown.collaboration!)
     expect(high.breakdown.impact).toBeGreaterThan(low.breakdown.impact)
   })
 })

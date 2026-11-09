@@ -14,6 +14,44 @@ The production application is hosted on Vercel as a unified full-stack project:
 - **Backend APIs & OAuth:** Dynamic requests (`/api/*`), OAuth endpoints (`/auth/*`), and social bot preview generators (`/u/:username`) run as Vercel Serverless Functions via adapter files in `api/` (such as `api/[...path].js`, `api/dashboard/[username].js`, and `api/meta/[username].js`). These functions execute the core Express application from `server/index.js`.
 - **Edge Rewrites (`vercel.json`):** Manages routing between static SPA assets and serverless function handlers without requiring a separate backend VM.
 
+```text
+               +-------------------------------------------------------+
+               |                    Browser / Client                   |
+               |          (React 18 + TypeScript + Vite + CSS)         |
+               +---------------------------+---------------------------+
+                                           |
+                    +-----------------------+-----------------------+
+                    |                                               |
+        (API / Auth / Proxy)                             (Direct Crawler Hits)
+                    v                                               v
++--------------------------------------+       +---------------------------------------+
+|        Vercel Serverless Functions   |       |        Vercel Edge Rewrite            |
+|       (api/* → Express app handler)  |       |      (has User-Agent: *bot*)          |
++------------------+-------------------+       +-------------------+-------------------+
+                   |                                               |
+                   | (Optional Standalone:                         v
+                   |  node server/index.js)        +-----------------------------------+
+                   |                               |      api/meta/[username].js       |
+                   |                               |  (Pre-rendered OG/Twitter HTML)   |
+                   |                               +-----------------------------------+
+                   |
+   +---------------+---------------+-------------------------------+
+   |                               |                               |
+   v                               v                               v
++--------------------+   +--------------------+          +--------------------+
+|  GitHub REST API   |   | GitHub GraphQL API |          | Ephemeral In-Memory|
+| (Events, Repos,    |   | (1-Yr Calendar,    |          | RAM Cache (Map)    |
+|  Languages, Users) |   |  Private Counts)   |          | (Per-instance TTL) |
++--------------------+   +--------------------+          +--------------------+
+```
+
+### Request Lifecycle & Concurrency Resilience
+- **Parallel Upstream Fetching:** Calls `/users/:username`, `/users/:username/repos`, and `/users/:username/events/public` simultaneously via `Promise.all` to avoid sequential network waterfalls.
+- **Bounded Commit Timing Race:** Commit history analysis is capped at the top 3 active non-fork repositories and raced against a 3.5s timeout (`Promise.race`).
+- **Dedicated Request Timeouts:** Backend queries are bounded by a 9-second timeout (`GITHUB_FETCH_TIMEOUT_MS`), and frontend requests by an 18-second timeout (`DEFAULT_REQUEST_TIMEOUT_MS`).
+- **Cancellation & Out-of-Order Protection:** In-flight browser requests are aborted via `AbortController` on query changes or unmounts, and generation counters (`genRef`) discard stale responses.
+- **Graceful Error Recovery:** Granular mapping of HTTP 400 (invalid user), 401 (auth expired), 404 (user not found), 429 (rate limited with reset time), and 504 (timeout) with dedicated recovery UI.
+
 ### Deploying to Vercel
 1. Import the repository in your [Vercel Dashboard](https://vercel.com/new).
 2. Configure project build settings:

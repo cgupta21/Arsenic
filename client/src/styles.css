@@ -191,7 +191,9 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .searchBox { height: 50px; border: 1px solid var(--border); background: var(--card); display: flex; align-items: center; padding: 5px 5px 5px 15px; border-radius: 12px; min-width: 420px; box-shadow: 0 20px 50px var(--shadow); }
 .searchBox svg { color: var(--muted); flex: 0 0 auto; }
 .searchBox input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); padding: 0 12px; font-size: 14px; }
-.searchBox button, .primaryBtn { height: 38px; border: 0; border-radius: 9px; padding: 0 16px; background: var(--terracotta); color: #17120f; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.searchBox button, .primaryBtn { height: 38px; border: 0; border-radius: 9px; padding: 0 16px; background: var(--terracotta); color: #17120f; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; gap: 7px; transition: background-color .15s ease, color .15s ease; }
+.searchBox button:hover:not(:disabled), .primaryBtn:hover:not(:disabled) { background: #d47651; color: #17120f; }
+.searchBox button:active:not(:disabled), .primaryBtn:active:not(:disabled) { background: #c4643f; color: #17120f; }
 .searchBox button:disabled, .primaryBtn:disabled { opacity: .56; cursor: not-allowed; }
 .error { border: 1px solid rgba(201,106,69,.4); background: rgba(201,106,69,.08); padding: 14px 16px; border-radius: 12px; color: #e5b09f; display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
 .error small { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }

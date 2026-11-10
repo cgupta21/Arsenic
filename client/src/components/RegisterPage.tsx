@@ -241,7 +241,7 @@ export function RegisterPage({
                   </div>
                   <div className="perkText">
                     <h4>Head-to-Head Compare</h4>
-                    <p>Benchmark two developers or contributors side-by-side across streaks, commit cadence, and health scores.</p>
+                    <p>Benchmark two developers or contributors side-by-side across streaks, commit cadence, and dimensional intelligence.</p>
                   </div>
                 </div>
 

@@ -1035,7 +1035,6 @@ function DashboardContent({
 }) {
   const user = data.user
   const languages = data.languages
-  const score = data.score
   const privateForSelf = Boolean(sessionUser && sessionUser.login.toLowerCase() === user.login.toLowerCase())
 
   return (
@@ -1103,7 +1102,7 @@ function DashboardContent({
       </section>
 
       <section className="dashboardGrid">
-        <Card title="Score anatomy" icon={<Sparkles />} action={score.score != null ? `Overall ${score.score}/100` : 'Score unavailable'}><ScoreBreakdown score={score} /></Card>
+        <Card title="Intelligence dimensions" icon={<Sparkles />} action={data.intelligence ? `${data.intelligence.activity.observationWindowDays}-day observation window` : 'Multidimensional telemetry'}><ScoreBreakdown dashboard={data} /></Card>
         <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.contributions.activeDays != null ? (data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`) : 'Activity unobserved'}><ContributionHeatmap data={data} /></Card>
       </section>
 
@@ -1177,8 +1176,19 @@ function DashboardContent({
         <div className="shareLayout">
           <div className="shareCard" ref={shareRef} id="share-card">
             <div className="shareBrand"><img src="/assets/arsenic-mark.svg" alt="" /><span>ARSENIC</span></div>
-            <div className="shareIdentity"><img src={user.avatar_url} alt="" crossOrigin="anonymous" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score != null ? score.score : '—'}</strong></div>
-            <div className="shareGrid"><div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div><div><b>{score.breakdown.consistency != null ? score.breakdown.consistency : '—'}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration != null ? score.breakdown.collaboration : '—'}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
+            <div className="shareIdentity">
+              <img src={user.avatar_url} alt="" crossOrigin="anonymous" />
+              <div>
+                <h3>{user.name || user.login}</h3>
+                <span>@{user.login}</span>
+              </div>
+            </div>
+            <div className="shareGrid">
+              <div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div>
+              <div><b>{data.intelligence ? compactNumber(data.intelligence.adoption.totalStargazersCount.value) : compactNumber(data.repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0))}</b><span>stars</span></div>
+              <div><b>{data.intelligence ? data.intelligence.maintenance.activeCount.value : data.repos.filter((r) => r.status === 'active').length}</b><span>active repos</span></div>
+              <div><b>{data.intelligence ? compactNumber(data.intelligence.reach?.followersCount?.value ?? user.followers) : compactNumber(user.followers)}</b><span>followers</span></div>
+            </div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>
           <ExportButtons targetId="share-card" />

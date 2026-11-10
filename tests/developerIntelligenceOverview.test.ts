@@ -4,9 +4,148 @@ import { resolve } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import { DeveloperIntelligenceOverview } from '../client/src/components/DeveloperIntelligenceOverview'
-import type { Dashboard } from '../client/src/types'
+import type { Dashboard, DeveloperIntelligence, MetricValue } from '../client/src/types'
+
+function metricNum(n: number): MetricValue<number> {
+  return n > 0 ? { state: 'observed', value: n } : { state: 'zero', value: 0 }
+}
 
 function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+  const isTruncated = overrides.dataQuality?.isTruncated ?? false
+  const eventsUnavailable = overrides.dataQuality?.eventsUnavailable ?? false
+  const activeDays = overrides.contributions?.activeDays ?? 62
+  const totalContrib = overrides.contributions?.total ?? 1840
+  const repos = overrides.repos ?? [
+    {
+      id: 101,
+      name: 'Arsenic',
+      html_url: 'https://github.com/cgupta21/Arsenic',
+      description: 'GitHub developer intelligence dashboard',
+      language: 'TypeScript',
+      languageColor: '#3178c6',
+      stargazers_count: 84,
+      forks_count: 12,
+      open_issues_count: 2,
+      updated_at: '2026-10-20T10:00:00Z',
+      pushed_at: '2026-10-20T10:00:00Z',
+      fork: false,
+      archived: false,
+      status: 'active',
+      daysSince: 1,
+      issueRatio: 2.1,
+    },
+    {
+      id: 102,
+      name: 'quantum-mesh',
+      html_url: 'https://github.com/cgupta21/quantum-mesh',
+      description: 'Resilient node topologies',
+      language: 'JavaScript',
+      languageColor: '#f1e05a',
+      stargazers_count: 26,
+      forks_count: 4,
+      open_issues_count: 0,
+      updated_at: '2026-09-12T00:00:00Z',
+      pushed_at: '2026-09-12T00:00:00Z',
+      fork: false,
+      archived: false,
+      status: 'active',
+      daysSince: 39,
+      issueRatio: 0,
+    },
+  ]
+  const nonForkRepos = repos.filter(r => !r.fork).length
+  const totalStars = repos.reduce((s, r) => s + (r.stargazers_count || 0), 0)
+  const forksCount = repos.reduce((s, r) => s + (r.forks_count || 0), 0)
+  const activeCount = repos.filter(r => r.status === 'active' && !r.fork).length
+  const staleCount = repos.filter(r => r.status === 'stale' && !r.fork).length
+  const archivedCount = repos.filter(r => r.status === 'archived' && !r.fork).length
+
+  // Prs/reviews from overrides if specified
+  const prs = overrides.score?.raw?.prs ?? 38
+  const reviews = overrides.score?.raw?.reviews ?? 20
+  const issues = overrides.score?.raw?.issues ?? 14
+  const defaultFollowers = overrides.user?.followers ?? (
+    overrides.score?.raw != null
+      ? ((overrides.score.raw as Record<string, unknown>).followers as number | undefined ?? ((overrides.score.raw.stars as number | undefined ?? 0) >= 100 ? 150 : 0))
+      : 142
+  )
+
+  const collectionState = eventsUnavailable ? 'unavailable' : isTruncated ? 'limit_reached' : 'complete'
+
+  const defaultIntelligence: DeveloperIntelligence = {
+    schemaVersion: '3.2.0',
+    collectedAt: '2026-10-20T10:00:00Z',
+    activity: {
+      source: 'graphql_calendar',
+      observationWindowStart: '2025-10-20T00:00:00Z',
+      observationWindowEnd: '2026-10-20T00:00:00Z',
+      observationWindowDays: 365,
+      recordedContributionDaysCount: metricNum(activeDays),
+      contributionCurrentStreakDays: { state: 'observed', value: 42 },
+      contributionLongestStreakDays: { state: 'observed', value: 68 },
+      totalRecordedContributions: metricNum(totalContrib),
+      privateContributionsCount: { state: 'observed', value: 0 }
+    },
+    adoption: {
+      snapshotType: 'current_point_in_time',
+      repositoryCoverage: {
+        totalOwnedPublicRepos: repos.length,
+        observedNonForkRepos: nonForkRepos,
+        totalEligibleNonForkRepos: nonForkRepos,
+        isComplete: true,
+        retrievalCap: 250
+      },
+      totalStargazersCount: metricNum(totalStars),
+      nonArchivedRepoStarsCount: metricNum(totalStars),
+      archivedRepoStarsCount: { state: 'zero', value: 0 },
+      forksCount: metricNum(forksCount)
+    },
+    reach: {
+      snapshotType: 'current_point_in_time',
+      followersCount: metricNum(defaultFollowers)
+    },
+    maintenance: {
+      repositoryCoverage: {
+        totalOwnedPublicRepos: repos.length,
+        observedNonForkRepos: nonForkRepos,
+        totalEligibleNonForkRepos: nonForkRepos,
+        isComplete: true,
+        retrievalCap: 250
+      },
+      observationWindowStart: '2026-07-22T00:00:00Z',
+      observationWindowEnd: '2026-10-20T00:00:00Z',
+      observationWindowDays: 90,
+      activeCount: metricNum(activeCount),
+      inactiveCount: metricNum(staleCount),
+      archivedCount: metricNum(archivedCount),
+      unknownCount: { state: 'zero', value: 0 }
+    },
+    engagement: {
+      source: 'rest_event_stream',
+      observationWindowStart: '2026-07-22T00:00:00Z',
+      observationWindowEnd: '2026-10-20T00:00:00Z',
+      observationWindowDays: 90,
+      collectionState,
+      retrievedEventsCount: collectionState === 'unavailable' ? 0 : 50,
+      pullRequestEventActionsCount: collectionState === 'unavailable'
+        ? { state: 'unavailable', value: null, note: 'unavailable' }
+        : isTruncated
+          ? { state: 'partial', value: prs, isLowerBound: true, note: 'truncated' }
+          : metricNum(prs),
+      pullRequestReviewEventActionsCount: collectionState === 'unavailable'
+        ? { state: 'unavailable', value: null, note: 'unavailable' }
+        : isTruncated
+          ? { state: 'partial', value: reviews, isLowerBound: true, note: 'truncated' }
+          : metricNum(reviews),
+      issueEventActionsCount: collectionState === 'unavailable'
+        ? { state: 'unavailable', value: null, note: 'unavailable' }
+        : isTruncated
+          ? { state: 'partial', value: issues, isLowerBound: true, note: 'truncated' }
+          : metricNum(issues),
+      issueCommentEventActionsCount: { state: 'zero', value: 0 }
+    }
+  }
+
   return {
     user: {
       login: 'cgupta21',
@@ -15,7 +154,7 @@ function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
       bio: 'Building developer intelligence tools and distributed systems.',
       html_url: 'https://github.com/cgupta21',
       public_repos: 24,
-      followers: 142,
+      followers: defaultFollowers,
       following: 38,
       created_at: '2020-03-15T00:00:00Z',
       location: 'San Francisco, CA',
@@ -123,6 +262,7 @@ function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
       graphqlReset: null,
       restRemaining: null,
     },
+    intelligence: defaultIntelligence,
     ...overrides,
   }
 }
@@ -211,11 +351,13 @@ describe('Developer Intelligence Overview in Dashboard', () => {
       })
       const html = renderToStaticMarkup(React.createElement(DeveloperIntelligenceOverview, { data }))
 
-      expect(html).toContain('94')
-      expect(html).toContain('Excellent Health')
-      expect(html).toContain('Consistency 96%')
-      expect(html).toContain('Collaboration 92%')
-      expect(html).toContain('Impact 94%')
+      // M-03 Multidimensional Intelligence: hero block displays transparent active days and dimensional measurements
+      expect(html).toContain('62')
+      expect(html).toContain('Active Days Recorded')
+      expect(html).toContain('62 Active Days')
+      expect(html).toContain('Non-Fork Repos')
+      expect(html).toContain('Stars')
+      expect(html).toContain('Followers')
     })
 
     it('renders Commits & PRs with accurate formatting and trend', () => {

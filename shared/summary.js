@@ -20,29 +20,48 @@ function pick(seed, arr) {
 // Signal scoring (all values normalised to 0–100)
 // ---------------------------------------------------------------------------
 
-function scoreSignals({ user = {}, repos = [], languages = [], contributions = {}, score = {}, timing = {}, observationWindowDays, dataQuality }) {
-  const windowDays = Math.max(1, Number(observationWindowDays) || Number(score?.observationWindowDays) || Number(score?.raw?.observationWindowDays) || 365)
+function scoreSignals({ user = {}, repos = [], languages = [], contributions = {}, timing = {}, observationWindowDays, dataQuality, intelligence }) {
+  const windowDays = Math.max(1, Number(observationWindowDays) || Number(intelligence?.activity?.observationWindowDays) || 365)
   const effectiveWindow = (dataQuality?.isTruncated && typeof dataQuality?.observedDaysCount === 'number')
     ? Math.min(windowDays, Math.max(14, dataQuality.observedDaysCount))
-    : (score?.effectiveWindowDays || windowDays)
+    : windowDays
 
   const eventsUnavailable = Boolean(dataQuality?.eventsUnavailable)
   const isTruncated = Boolean(dataQuality?.isTruncated)
-  const collaborationUnavailable = eventsUnavailable || isTruncated || score?.breakdown?.collaboration == null
+  const eng = intelligence?.engagement
+  const collaborationUnavailable = eventsUnavailable || isTruncated || (eng && eng.collectionState !== 'complete')
 
   const safeRepos     = Array.isArray(repos) ? repos : []
   const safeLangs     = Array.isArray(languages) ? languages : []
-  const totalStars    = safeRepos.reduce((s, r) => s + (r.stargazers_count || 0), 0)
-  const totalForks    = safeRepos.reduce((f, r) => f + (r.forks_count    || 0), 0)
-  const followers     = user.followers ?? 0
-  const totalContrib  = eventsUnavailable ? null : (contributions.total ?? score?.raw?.totalContributions ?? 0)
-  const activeDays    = eventsUnavailable ? null : (contributions.activeDays ?? score?.raw?.activeDays ?? 0)
-  const longestStreak = eventsUnavailable ? 0 : (contributions.longestStreak ?? score?.raw?.longestStreak ?? 0)
-  const currentStreak = eventsUnavailable ? 0 : (contributions.currentStreak ?? score?.raw?.currentStreak ?? 0)
-  const prs           = eventsUnavailable ? null : (score?.raw?.prs ?? 0)
-  const issues        = eventsUnavailable ? null : (score?.raw?.issues ?? 0)
-  const reviews       = eventsUnavailable ? null : (score?.raw?.reviews ?? 0)
-  const totalCollab   = (eventsUnavailable || collaborationUnavailable) ? null : ((prs || 0) + (issues || 0) + (reviews || 0))
+  const totalStars    = intelligence?.adoption?.totalStargazersCount?.value ?? safeRepos.reduce((s, r) => s + (r.stargazers_count || 0), 0)
+  const totalForks    = intelligence?.adoption?.forksCount?.value ?? safeRepos.reduce((f, r) => f + (r.forks_count    || 0), 0)
+  const followers     = intelligence?.reach?.followersCount?.value ?? user.followers ?? 0
+
+  const actTotal = intelligence?.activity?.source === 'graphql_calendar'
+    ? intelligence.activity.totalRecordedContributions?.value
+    : intelligence?.activity?.totalObservedPublicEvents?.value
+  const actDays = intelligence?.activity?.source === 'graphql_calendar'
+    ? intelligence.activity.recordedContributionDaysCount?.value
+    : intelligence?.activity?.observedPublicEventDaysCount?.value
+  const actLongest = intelligence?.activity?.source === 'graphql_calendar'
+    ? intelligence.activity.contributionLongestStreakDays?.value
+    : intelligence?.activity?.observedPublicEventDateStreakDays?.value
+  const actCurrent = intelligence?.activity?.source === 'graphql_calendar'
+    ? intelligence.activity.contributionCurrentStreakDays?.value
+    : 0
+
+  const totalContrib  = eventsUnavailable ? null : (contributions.total ?? actTotal ?? 0)
+  const activeDays    = eventsUnavailable ? null : (contributions.activeDays ?? actDays ?? 0)
+  const longestStreak = eventsUnavailable ? 0 : (contributions.longestStreak ?? actLongest ?? 0)
+  const currentStreak = eventsUnavailable ? 0 : (contributions.currentStreak ?? actCurrent ?? 0)
+
+  const prs           = eventsUnavailable ? null : (eng?.pullRequestEventActionsCount?.value ?? null)
+  const issues        = eventsUnavailable ? null : (eng?.issueEventActionsCount?.value ?? null)
+  const reviews       = eventsUnavailable ? null : (eng?.pullRequestReviewEventActionsCount?.value ?? null)
+  const totalCollab   = (eventsUnavailable || collaborationUnavailable || (prs == null && issues == null && reviews == null))
+    ? null
+    : ((prs || 0) + (issues || 0) + (reviews || 0))
+
   const totalRepos    = safeRepos.length || 0
   const activeRepos   = safeRepos.filter(r => r.status === 'active').length
   const staleRepos    = safeRepos.filter(r => r.status === 'stale').length
@@ -162,7 +181,7 @@ function insightCollaboration(raw, subject) {
   ])
 }
 
-function insightNoCollaboration(raw, subject) {
+function insightNoCollaboration(raw, _subject) {
   if (raw.eventsUnavailable || raw.collaborationUnavailable) return null
   // Useful contrast insight when collaboration is zero but contributions exist
   const { totalCollab, totalContrib } = raw
@@ -174,7 +193,7 @@ function insightNoCollaboration(raw, subject) {
   ])
 }
 
-function insightRepositories(raw, subject) {
+function insightRepositories(raw, _subject) {
   const { totalRepos, activeRepos, staleRepos, archivedRepos } = raw
   if (totalRepos === 0) return null
 
@@ -207,7 +226,7 @@ function insightRepositories(raw, subject) {
   ])
 }
 
-function insightLanguages(raw, subject) {
+function insightLanguages(raw, _subject) {
   const { topLangs, langConc } = raw
   if (topLangs.length === 0) return null
   const primary = topLangs[0]
@@ -226,7 +245,7 @@ function insightLanguages(raw, subject) {
   ])
 }
 
-function insightTiming(raw, timing, subject) {
+function insightTiming(raw, timing, _subject) {
   if ((timing.commitsSampled || 0) < 10) return null
   const topHour    = timing.hours.reduce((b, c, i, a) => c > a[b] ? i : b, 0)
   const topWeekday = timing.weekdays.reduce((b, c, i, a) => c > a[b] ? i : b, 0)
@@ -246,35 +265,29 @@ function insightNoActivity(raw, subject) {
 }
 
 // ---------------------------------------------------------------------------
-// Score synthesis (no raw metrics repeated)
+// Dimensional intelligence synthesis (no score, no arbitrary /100)
 // ---------------------------------------------------------------------------
 
-function synthesiseScore(scoreData = {}, usedSignals, subject) {
-  const score = scoreData?.score
-  const breakdown = scoreData?.breakdown || {}
-  const cons = breakdown.consistency
-  const coll = breakdown.collaboration
-  const imp = breakdown.impact ?? 0
-
+function synthesiseDimensionalIntelligence(raw, usedSignals, subject, _intelligence) {
   const dims = []
-  if (!usedSignals.has('impact') && imp != null) dims.push(imp >= 50 ? 'strong impact' : imp >= 20 ? 'moderate impact' : 'limited impact')
-  if (!usedSignals.has('consistency') && cons != null) dims.push(cons >= 50 ? 'strong consistency' : cons >= 20 ? 'moderate consistency' : 'limited consistency')
-  if (!usedSignals.has('collaboration') && coll != null) dims.push(coll >= 50 ? 'robust collaboration' : coll >= 20 ? 'moderate collaboration' : 'limited collaboration')
-
-  if (score == null) {
-    if (dims.length === 0) return `${subject}'s public profile displays verified repository and code metrics.`
-    return `${subject}'s profile is characterized by ${dims.join(', ')} across verified repository metrics.`
+  if (!usedSignals.has('impact') && (raw.totalStars > 0 || raw.totalForks > 0)) {
+    dims.push(raw.totalStars >= 50 ? 'strong repository adoption' : 'moderate repository adoption')
+  }
+  if (!usedSignals.has('consistency') && raw.activeDays != null && raw.activeDays > 0) {
+    dims.push(raw.activeDays >= 30 ? 'strong contribution consistency' : 'moderate contribution consistency')
+  }
+  if (!usedSignals.has('collaboration') && raw.totalCollab != null && raw.totalCollab > 0) {
+    dims.push(raw.totalCollab >= 5 ? 'robust community engagement' : 'moderate community engagement')
+  }
+  if (!usedSignals.has('reach') && raw.followers > 0) {
+    dims.push(raw.followers >= 50 ? 'established account reach' : 'growing account reach')
   }
 
   if (dims.length === 0) {
-    return `The combined developer score is ${score}/100.`
+    return `${subject}'s public profile displays verified repository and code metrics.`
   }
 
-  return pick(score, [
-    `The developer score of ${score}/100 reflects ${dims.join(', ')}.`,
-    `Scoring ${score}/100, ${subject}'s profile is defined by ${dims.join(', ')}.`,
-    `Overall, ${dims.join(', ')} compose the ${score}/100 developer score.`,
-  ])
+  return `${subject}'s profile is characterized by ${dims.join(', ')} across verified repository metrics.`
 }
 
 // ---------------------------------------------------------------------------
@@ -282,16 +295,16 @@ function synthesiseScore(scoreData = {}, usedSignals, subject) {
 // ---------------------------------------------------------------------------
 
 export function generateDeveloperSummary(data) {
-  const { user = {}, repos = [], languages = [], contributions = {}, score = {}, timing = {} } = data || {}
+  const { user = {}, repos = [], languages = [], contributions = {}, timing = {}, intelligence } = data || {}
   const subject = user.name?.trim() || (user.login ? `@${user.login}` : 'Developer')
 
   const dataQuality = data?.dataQuality || data?.contributions?.dataQuality || null
   const observationWindowDays = dataQuality?.observationWindowDays ||
-    data?.score?.raw?.observationWindowDays ||
-    data?.score?.observationWindowDays ||
+    intelligence?.activity?.observationWindowDays ||
+    data?.observationWindowDays ||
     (data?.estimated ? 90 : 365)
 
-  const { signals, raw } = scoreSignals({ user, repos, languages, contributions, score, timing, observationWindowDays, dataQuality })
+  const { signals, raw } = scoreSignals({ user, repos, languages, contributions, timing, observationWindowDays, dataQuality, intelligence })
 
   // Rank signals (descending strength), exclude zero-value
   const ranked = Object.entries(signals)
@@ -304,7 +317,7 @@ export function generateDeveloperSummary(data) {
   const usedSignals = new Set()
   const insights    = []
 
-  const MAX_INSIGHTS = 3  // cap before score synthesis
+  const MAX_INSIGHTS = 3  // cap before dimensional synthesis
 
   for (const sig of ranked) {
     if (insights.length >= MAX_INSIGHTS) break
@@ -354,8 +367,8 @@ export function generateDeveloperSummary(data) {
     }
   }
 
-  // Score synthesis (reads usedSignals to avoid repeating metrics)
-  insights.push(synthesiseScore(score, usedSignals, subject))
+  // Dimensional intelligence synthesis (reads usedSignals to avoid repeating metrics)
+  insights.push(synthesiseDimensionalIntelligence(raw, usedSignals, subject, intelligence))
 
   // Deduplication guard: strip any paragraph that shares a 6+ digit numeral
   // with an earlier paragraph (catches accidental metric repeats)

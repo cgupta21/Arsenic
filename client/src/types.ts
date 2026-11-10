@@ -1,3 +1,35 @@
+import type {
+  DeveloperIntelligence,
+  ContributionActivityDimension,
+  RepositoryAdoptionDimension,
+  AccountReachDimension,
+  RepositoryMaintenanceDimension,
+  CommunityEngagementDimension,
+  MetricValue,
+  ObservationState,
+  RestCollectionState,
+  TelemetrySource,
+  RepositoryCoverage,
+  MetricKey,
+  MetricComparisonResult
+} from '../../shared/intelligence'
+
+export type {
+  DeveloperIntelligence,
+  ContributionActivityDimension,
+  RepositoryAdoptionDimension,
+  AccountReachDimension,
+  RepositoryMaintenanceDimension,
+  CommunityEngagementDimension,
+  MetricValue,
+  ObservationState,
+  RestCollectionState,
+  TelemetrySource,
+  RepositoryCoverage,
+  MetricKey,
+  MetricComparisonResult
+}
+
 export type User = {
   login: string
   name: string | null
@@ -72,7 +104,9 @@ export type Dashboard = {
   observationWindowDays?: number
   languages: { name: string; size: number; pct: number; color: string | null }[]
   timing: { commitsSampled: number; hours: number[]; weekdays: number[]; timezone?: string }
-  score: {
+  intelligence?: DeveloperIntelligence
+  /** @deprecated Retired in M-03 in favor of multidimensional intelligence */
+  score?: {
     score: number | null
     scoringModel?: 'three_pillar' | 'two_pillar_renormalized' | 'unavailable'
     breakdown: {

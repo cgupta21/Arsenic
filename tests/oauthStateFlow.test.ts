@@ -1016,7 +1016,9 @@ describe('GitHub OAuth Scope Validation & Private Contribution Capability', () =
     expect((data.user as Record<string, unknown>).login).toBe('bob')
     expect(Array.isArray(data.repos)).toBe(true)
     expect((data.repos as unknown[]).length).toBe(1)
-    expect((data.score as Record<string, unknown>).score).toBeDefined()
+    // M-03 Score retirement: score is retired from API responses, replaced by multidimensional intelligence
+    expect(data.score).toBeUndefined()
+    expect(data.intelligence).toBeDefined()
   })
 })
 

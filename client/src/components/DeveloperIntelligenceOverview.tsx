@@ -8,15 +8,6 @@ export interface DeveloperIntelligenceOverviewProps {
   loading?: boolean
 }
 
-function getHealthGrade(score: number | null): string {
-  if (score == null) return 'Telemetry Partial'
-  if (score >= 85) return 'Excellent Health'
-  if (score >= 70) return 'Strong Health'
-  if (score >= 50) return 'Moderate Health'
-  if (score >= 30) return 'Developing Health'
-  return 'Low Activity'
-}
-
 function getDensityLevelClass(day: { contributionCount: number; isObserved?: boolean } | null, eventsUnavailable?: boolean): string {
   if (eventsUnavailable || (day && day.isObserved === false)) return 'lvl-unobserved'
   if (!day || day.contributionCount <= 0) return 'lvl-0'
@@ -28,7 +19,7 @@ function getDensityLevelClass(day: { contributionCount: number; isObserved?: boo
 
 export function DeveloperIntelligenceOverview({ data, loading = false }: DeveloperIntelligenceOverviewProps) {
   const user = data.user
-  const score = data.score
+  const intelligence = data.intelligence
   const repos = data.repos || []
   const days = data.contributions?.days || []
 
@@ -43,19 +34,37 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
 
   // Total stars across analyzed repos
   const totalStars = useMemo(() => {
-    return score.raw?.stars ?? repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
-  }, [score.raw?.stars, repos])
+    if (intelligence?.adoption?.totalStargazersCount?.value != null) {
+      return intelligence.adoption.totalStargazersCount.value
+    }
+    return repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+  }, [intelligence?.adoption?.totalStargazersCount?.value, repos])
+
+  const nonForkReposCount = useMemo(() => {
+    if (intelligence?.maintenance?.repositoryCoverage?.observedNonForkRepos != null) {
+      return intelligence.maintenance.repositoryCoverage.observedNonForkRepos
+    }
+    return repos.filter((r) => !r.fork).length
+  }, [intelligence?.maintenance?.repositoryCoverage?.observedNonForkRepos, repos])
+
+  const activeDaysCount = useMemo(() => {
+    if (!intelligence) return data.contributions?.activeDays ?? null
+    if (intelligence.activity.source === 'graphql_calendar') {
+      return intelligence.activity.recordedContributionDaysCount.value
+    }
+    return intelligence.activity.observedPublicEventDaysCount.value
+  }, [intelligence, data.contributions?.activeDays])
 
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
 
   // Determine whether genuine positive contribution activity has been demonstrated
   const hasDemonstratedActivity = useMemo(() => {
     if (eventsUnavailable) return false
-    const total = data.contributions?.total ?? score.raw?.totalContributions
-    const activeDays = data.contributions?.activeDays ?? score.raw?.activeDays
-    const prs = score.raw?.prs
-    const issues = score.raw?.issues
-    const reviews = score.raw?.reviews
+    const total = data.contributions?.total
+    const activeDays = data.contributions?.activeDays
+    const prs = intelligence?.engagement?.pullRequestEventActionsCount?.value
+    const issues = intelligence?.engagement?.issueEventActionsCount?.value
+    const reviews = intelligence?.engagement?.pullRequestReviewEventActionsCount?.value
     const hasDayActivity = days.some((d) => (d.contributionCount || 0) > 0)
     return (
       (total != null && total > 0) ||
@@ -69,11 +78,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
     eventsUnavailable,
     data.contributions?.total,
     data.contributions?.activeDays,
-    score.raw?.totalContributions,
-    score.raw?.activeDays,
-    score.raw?.prs,
-    score.raw?.issues,
-    score.raw?.reviews,
+    intelligence?.engagement,
     days,
   ])
 
@@ -102,23 +107,24 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
         positive: true,
       }
     }
-    const prs = score.raw?.prs ?? 0
+    const prs = intelligence?.engagement?.pullRequestEventActionsCount?.value ?? 0
     if (prs > 0) {
       return { text: `${prs} PRs on record`, positive: false }
     }
     return { text: '0 recent contributions', positive: false }
-  }, [days, score.raw?.prs, eventsUnavailable, data.contributions.total])
+  }, [days, intelligence?.engagement?.pullRequestEventActionsCount?.value, eventsUnavailable, data.contributions.total])
 
   // PR velocity calculated over weeks in contribution window
   const prVelocityData = useMemo(() => {
-    if (eventsUnavailable || score.raw?.prs == null) {
+    const rawPrCount = intelligence?.engagement?.pullRequestEventActionsCount?.value
+    if (eventsUnavailable || rawPrCount == null) {
       return {
         velocity: '—',
         subtext: 'Telemetry unavailable',
         positive: false,
       }
     }
-    const prCount = score.raw.prs
+    const prCount = rawPrCount
     const weeksCount = data.estimated
       ? 13 // ~90 days in public fallback mode
       : days.length > 0
@@ -147,7 +153,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
       subtext,
       positive,
     }
-  }, [score.raw?.prs, data.estimated, days.length, eventsUnavailable])
+  }, [intelligence?.engagement?.pullRequestEventActionsCount?.value, data.estimated, days.length, eventsUnavailable])
 
   // Recent 64 days for the 16x4 desktop / 8x8 mobile density grid
   const recentDensityDays = useMemo(() => {
@@ -204,69 +210,105 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
         </div>
 
         <div className="previewCardBody">
-          {/* Top Score Strip with Health Score and Component Indicators */}
-          <div className="previewScoreStrip">
-            <div className="previewScoreMain">
-              <div className="previewScoreValue" data-testid="overview-health-score">
-                {score.score != null ? score.score : '—'}
-              </div>
-              <div className="previewScoreMeta">
-                <div className="scoreGrade">{getHealthGrade(score.score)}</div>
-                <div className="scoreSubtext" data-testid="overview-score-breakdown">
-                  Consistency {score.breakdown.consistency != null ? `${score.breakdown.consistency}%` : 'Unavailable'} • Collaboration{' '}
-                  {score.breakdown.collaboration != null ? `${score.breakdown.collaboration}%` : 'Unavailable'} • Impact {score.breakdown.impact}%
+          {/* Top Score Strip with Transparent Multidimensional Intelligence */}
+          {(() => {
+            const engagement = intelligence?.engagement
+            const isTruncated = Boolean(data.dataQuality?.isTruncated)
+            const isCollabComplete = Boolean(
+              engagement &&
+              engagement.collectionState === 'complete' &&
+              !isTruncated &&
+              !eventsUnavailable
+            )
+
+            const prCollabActions = isCollabComplete ? (engagement?.pullRequestEventActionsCount?.value ?? 0) : 0
+            const reviewCollabActions = isCollabComplete ? (engagement?.pullRequestReviewEventActionsCount?.value ?? 0) : 0
+
+            const isHighVelocity = !eventsUnavailable && isCollabComplete && (
+              prCollabActions >= 8 ||
+              (prVelocityData.velocity !== '—' && Number(prVelocityData.velocity) >= 2)
+            )
+
+            const isActiveCollab = !eventsUnavailable && isCollabComplete && !isHighVelocity && (
+              (prCollabActions + reviewCollabActions) >= 3
+            )
+
+            const isLowCollab = !eventsUnavailable && isCollabComplete && hasDemonstratedActivity && (
+              (prCollabActions + reviewCollabActions) <= 1
+            )
+
+            const reachMetric = intelligence?.reach?.followersCount
+            const isReachObserved = !data.estimated &&
+              reachMetric?.state === 'observed' &&
+              typeof reachMetric.value === 'number' &&
+              Number.isFinite(reachMetric.value)
+            const isHighReach = isReachObserved && reachMetric.value >= 100
+            const reachFollowers = reachMetric?.value ?? user.followers
+
+            return (
+              <div className="previewScoreStrip">
+                <div className="previewScoreMain">
+                  <div className="previewScoreValue" data-testid="overview-health-score">
+                    {activeDaysCount != null ? activeDaysCount : '—'}
+                  </div>
+                  <div className="previewScoreMeta">
+                    <div className="scoreGrade">Active Days Recorded</div>
+                    <div className="scoreSubtext" data-testid="overview-score-breakdown">
+                      {activeDaysCount != null ? `${activeDaysCount} Active Days` : 'Activity Unobserved'} • {nonForkReposCount} Non-Fork Repos • {compactNumber(totalStars)} Stars • {compactNumber(reachFollowers)} Followers
+                    </div>
+                  </div>
+                </div>
+                <div className="previewScoreTags">
+                  {eventsUnavailable ? (
+                    <span className="previewTag tagSand">
+                      <Sparkles size={12} aria-hidden="true" /> Telemetry Partial
+                    </span>
+                  ) : isHighVelocity ? (
+                    <span className="previewTag tagSage">
+                      <CheckCircle2 size={12} aria-hidden="true" /> High Velocity
+                    </span>
+                  ) : isActiveCollab ? (
+                    <span className="previewTag tagSage">
+                      <CheckCircle2 size={12} aria-hidden="true" /> Active Collab
+                    </span>
+                  ) : isLowCollab ? (
+                    <span
+                      className="previewTag tagSand"
+                      title="Limited collaboration signals in observed public activity"
+                    >
+                      <CheckCircle2 size={12} aria-hidden="true" /> Low Collaboration
+                    </span>
+                  ) : null}
+
+                  {eventsUnavailable ? (
+                    hasActiveRepos ? (
+                      <span className="previewTag tagSand">
+                        <GitBranch size={12} aria-hidden="true" /> Active Maintenance
+                      </span>
+                    ) : null
+                  ) : (data.contributions?.currentStreak ?? 0) >= 7 || (activeDaysCount != null && activeDaysCount >= 30) ? (
+                    <span className="previewTag tagSand">
+                      <GitBranch size={12} aria-hidden="true" /> Steady Cadence
+                    </span>
+                  ) : hasActiveRepos ? (
+                    <span className="previewTag tagSand">
+                      <GitBranch size={12} aria-hidden="true" /> Active Maintenance
+                    </span>
+                  ) : null}
+
+                  {data.estimated ? (
+                    <span className="previewTag tagTerracotta">
+                      <Sparkles size={12} aria-hidden="true" /> Public Estimate
+                    </span>
+                  ) : isHighReach ? (
+                    <span className="previewTag tagTerracotta">
+                      <Sparkles size={12} aria-hidden="true" /> High Reach
+                    </span>
+                  ) : null}
                 </div>
               </div>
-            </div>
-            <div className="previewScoreTags">
-              {eventsUnavailable ? (
-                <span className="previewTag tagSand">
-                  <Sparkles size={12} aria-hidden="true" /> Telemetry Partial
-                </span>
-              ) : (score.breakdown.collaboration != null && score.breakdown.collaboration >= 60) || (prVelocityData.velocity !== '—' && Number(prVelocityData.velocity) >= 2) ? (
-                <span className="previewTag tagSage">
-                  <CheckCircle2 size={12} aria-hidden="true" /> High Velocity
-                </span>
-              ) : score.breakdown.collaboration != null && score.breakdown.collaboration >= 35 ? (
-                <span className="previewTag tagSage">
-                  <CheckCircle2 size={12} aria-hidden="true" /> Active Collab
-                </span>
-              ) : !data.dataQuality?.isTruncated && score.breakdown.collaboration != null && score.breakdown.collaboration < 35 && hasDemonstratedActivity ? (
-                <span
-                  className="previewTag tagSand"
-                  title="Limited collaboration signals in observed public activity"
-                >
-                  <CheckCircle2 size={12} aria-hidden="true" /> Low Collaboration
-                </span>
-              ) : null}
-
-              {eventsUnavailable ? (
-                hasActiveRepos ? (
-                  <span className="previewTag tagSand">
-                    <GitBranch size={12} aria-hidden="true" /> Active Maintenance
-                  </span>
-                ) : null
-              ) : (data.contributions?.currentStreak ?? 0) >= 7 || (score.breakdown.consistency != null && score.breakdown.consistency >= 75) ? (
-                <span className="previewTag tagSand">
-                  <GitBranch size={12} aria-hidden="true" /> Steady Cadence
-                </span>
-              ) : hasActiveRepos ? (
-                <span className="previewTag tagSand">
-                  <GitBranch size={12} aria-hidden="true" /> Active Maintenance
-                </span>
-              ) : null}
-
-              {data.estimated ? (
-                <span className="previewTag tagTerracotta">
-                  <Sparkles size={12} aria-hidden="true" /> Public Estimate
-                </span>
-              ) : score.breakdown.impact >= 60 ? (
-                <span className="previewTag tagTerracotta">
-                  <Sparkles size={12} aria-hidden="true" /> High Reach
-                </span>
-              ) : null}
-            </div>
-          </div>
+            )
+          })()}
 
           {/* Metric Cards Row: Commits & PRs, Active Streak, PR Velocity, Tracked Repos */}
           <div className="previewMetricsGrid">

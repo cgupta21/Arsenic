@@ -373,4 +373,554 @@ describe('Developer Intelligence Overview in Dashboard', () => {
       expect(html).toContain('Refreshing Intelligence…')
     })
   })
+
+  describe('5. M-02 Developer Badge Integrity & Qualification', () => {
+    it('1. Dormant profile: does not award Low Collaboration or Clean Branching', () => {
+      const dormantData = makeMockDashboard({
+        repos: [
+          {
+            id: 201,
+            name: 'old-repo',
+            html_url: 'https://github.com/cgupta21/old-repo',
+            description: 'Archived legacy project',
+            language: 'JavaScript',
+            stargazers_count: 5,
+            forks_count: 0,
+            open_issues_count: 0,
+            updated_at: '2023-01-01T00:00:00Z',
+            pushed_at: '2023-01-01T00:00:00Z',
+            fork: false,
+            status: 'stale',
+          },
+        ],
+        events: [],
+        contributions: {
+          days: Array.from({ length: 90 }, (_, i) => ({
+            date: `2026-08-${String((i % 30) + 1).padStart(2, '0')}`,
+            contributionCount: 0,
+            weekday: 1,
+            isObserved: true,
+          })),
+          total: 0,
+          activeDays: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 5,
+          scoringModel: 'three_pillar',
+          breakdown: { consistency: 0, collaboration: 0, impact: 15 },
+          raw: {
+            activeDays: 0,
+            totalContributions: 0,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 5,
+            forks: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+            timingSamples: 0,
+          },
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: dormantData })
+      )
+      expect(html).not.toContain('Low Collaboration')
+      expect(html).not.toContain('Solo Cadence')
+      expect(html).not.toContain('Clean Branching')
+    })
+
+    it('2. Zero-repository profile: does not award Clean Branching', () => {
+      const noRepoData = makeMockDashboard({
+        repos: [],
+        score: {
+          score: 10,
+          breakdown: { consistency: 20, collaboration: 10, impact: 0 },
+          raw: {
+            activeDays: 4,
+            totalContributions: 10,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 0,
+            forks: 0,
+            currentStreak: 0,
+            longestStreak: 1,
+            timingSamples: 0,
+          },
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: noRepoData })
+      )
+      expect(html).not.toContain('Clean Branching')
+    })
+
+    it('3. Genuine active low-collaboration profile: retains Low Collaboration badge', () => {
+      const soloData = makeMockDashboard({
+        contributions: {
+          days: Array.from({ length: 90 }, (_, i) => ({
+            date: `2026-08-${String((i % 30) + 1).padStart(2, '0')}`,
+            contributionCount: i % 4 === 0 ? 3 : 0,
+            weekday: 1,
+            isObserved: true,
+          })),
+          total: 65,
+          activeDays: 22,
+          currentStreak: 3,
+          longestStreak: 5,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 55,
+          scoringModel: 'three_pillar',
+          breakdown: { consistency: 60, collaboration: 15, impact: 30 },
+          raw: {
+            activeDays: 22,
+            totalContributions: 65,
+            prs: 0,
+            issues: 1,
+            reviews: 0,
+            stars: 12,
+            forks: 2,
+            currentStreak: 3,
+            longestStreak: 5,
+            timingSamples: 15,
+          },
+        },
+        dataQuality: {
+          observationWindowDays: 90,
+          isEstimated: false,
+          isTruncated: false,
+          eventsUnavailable: false,
+          oldestEventDate: '2026-07-22T00:00:00Z',
+          eventCount: 45,
+          observedDaysCount: 90,
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: soloData })
+      )
+      expect(html).toContain('Low Collaboration')
+      expect(html).toContain('title="Limited collaboration signals in observed public activity"')
+      expect(html).not.toContain('Solo Cadence')
+      expect(html).not.toContain('Clean Branching')
+    })
+
+    it('4. Truncated telemetry with null collaboration: does not award Low Collaboration', () => {
+      const truncatedData = makeMockDashboard({
+        contributions: {
+          days: Array.from({ length: 90 }, (_, i) => ({
+            date: `2026-08-${String((i % 30) + 1).padStart(2, '0')}`,
+            contributionCount: i < 15 ? 4 : 0,
+            weekday: 1,
+            isObserved: i < 15,
+          })),
+          total: 60,
+          activeDays: 14,
+          currentStreak: 4,
+          longestStreak: 6,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 65,
+          scoringModel: 'two_pillar_renormalized',
+          breakdown: { consistency: 80, collaboration: null, impact: 40 },
+          raw: {
+            activeDays: 14,
+            totalContributions: 60,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 20,
+            forks: 2,
+            currentStreak: 4,
+            longestStreak: 6,
+            timingSamples: 14,
+          },
+        },
+        dataQuality: {
+          observationWindowDays: 90,
+          isEstimated: true,
+          isTruncated: true,
+          eventsUnavailable: false,
+          oldestEventDate: '2026-10-05T00:00:00Z',
+          eventCount: 300,
+          observedDaysCount: 15,
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: truncatedData })
+      )
+      expect(html).not.toContain('Low Collaboration')
+      expect(html).not.toContain('Solo Cadence')
+      expect(html).not.toContain('Clean Branching')
+    })
+
+    it('5. Unavailable events with stale repositories: displays Telemetry Partial but neither Clean Branching nor Low Collaboration', () => {
+      const unavailData = makeMockDashboard({
+        repos: [
+          {
+            id: 301,
+            name: 'stale-repo',
+            html_url: 'https://github.com/cgupta21/stale-repo',
+            description: 'Stale project',
+            language: 'Python',
+            stargazers_count: 3,
+            forks_count: 0,
+            open_issues_count: 0,
+            updated_at: '2024-01-01T00:00:00Z',
+            pushed_at: '2024-01-01T00:00:00Z',
+            fork: false,
+            status: 'stale',
+          },
+        ],
+        score: {
+          score: null,
+          scoringModel: 'unavailable',
+          breakdown: { consistency: null, collaboration: null, impact: 20 },
+          raw: {
+            activeDays: null,
+            totalContributions: null,
+            prs: null,
+            issues: null,
+            reviews: null,
+            stars: 3,
+            forks: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+            timingSamples: 0,
+          },
+        },
+        dataQuality: {
+          observationWindowDays: 90,
+          isEstimated: true,
+          isTruncated: false,
+          eventsUnavailable: true,
+          oldestEventDate: null,
+          eventCount: 0,
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: unavailData })
+      )
+      expect(html).toContain('Telemetry Partial')
+      expect(html).not.toContain('Clean Branching')
+      expect(html).not.toContain('Low Collaboration')
+      expect(html).not.toContain('Solo Cadence')
+    })
+
+    it('6. Successful empty activity feed: does not mistake zero activity for low collaboration', () => {
+      const emptyFeedData = makeMockDashboard({
+        events: [],
+        contributions: {
+          days: Array.from({ length: 90 }, (_, i) => ({
+            date: `2026-08-${String((i % 30) + 1).padStart(2, '0')}`,
+            contributionCount: 0,
+            weekday: 1,
+            isObserved: true,
+          })),
+          total: 0,
+          activeDays: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 15,
+          scoringModel: 'three_pillar',
+          breakdown: { consistency: 0, collaboration: 0, impact: 45 },
+          raw: {
+            activeDays: 0,
+            totalContributions: 0,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 35,
+            forks: 5,
+            currentStreak: 0,
+            longestStreak: 0,
+            timingSamples: 0,
+          },
+        },
+        dataQuality: {
+          observationWindowDays: 90,
+          isEstimated: false,
+          isTruncated: false,
+          eventsUnavailable: false,
+          oldestEventDate: null,
+          eventCount: 0,
+          observedDaysCount: 90,
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: emptyFeedData })
+      )
+      expect(html).not.toContain('Low Collaboration')
+      expect(html).not.toContain('Solo Cadence')
+      expect(html).not.toContain('Clean Branching')
+    })
+
+    it('7. Active Maintenance remains available when its repository activity condition is satisfied', () => {
+      const activeRepoData = makeMockDashboard({
+        repos: [
+          {
+            id: 401,
+            name: 'live-repo',
+            html_url: 'https://github.com/cgupta21/live-repo',
+            description: 'Actively maintained repository',
+            language: 'Go',
+            stargazers_count: 10,
+            forks_count: 1,
+            open_issues_count: 1,
+            updated_at: '2026-10-18T00:00:00Z',
+            pushed_at: '2026-10-18T00:00:00Z',
+            fork: false,
+            status: 'active',
+          },
+        ],
+        contributions: {
+          days: [],
+          total: 15,
+          activeDays: 5,
+          currentStreak: 0,
+          longestStreak: 2,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 40,
+          breakdown: { consistency: 30, collaboration: 10, impact: 25 },
+          raw: {
+            activeDays: 5,
+            totalContributions: 15,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 10,
+            forks: 1,
+            currentStreak: 0,
+            longestStreak: 2,
+            timingSamples: 5,
+          },
+        },
+      })
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: activeRepoData })
+      )
+      expect(html).toContain('Active Maintenance')
+    })
+
+    it('8. Valid High Velocity, Active Collab, Steady Cadence, and High Reach behavior remains unchanged', () => {
+      // High Velocity, Steady Cadence & High Reach
+      const highVelData = makeMockDashboard({
+        score: {
+          score: 85,
+          breakdown: { consistency: 80, collaboration: 75, impact: 80 },
+          raw: {
+            activeDays: 50,
+            totalContributions: 600,
+            prs: 45,
+            issues: 10,
+            reviews: 25,
+            stars: 200,
+            forks: 40,
+            currentStreak: 15,
+            longestStreak: 20,
+            timingSamples: 45,
+          },
+        },
+      })
+      const highVelHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: highVelData })
+      )
+      expect(highVelHtml).toContain('High Velocity')
+      expect(highVelHtml).toContain('Steady Cadence')
+      expect(highVelHtml).toContain('High Reach')
+
+      // Active Collab
+      const activeCollabData = makeMockDashboard({
+        score: {
+          score: 60,
+          breakdown: { consistency: 50, collaboration: 45, impact: 30 },
+          raw: {
+            activeDays: 30,
+            totalContributions: 120,
+            prs: 3,
+            issues: 5,
+            reviews: 6,
+            stars: 20,
+            forks: 3,
+            currentStreak: 2,
+            longestStreak: 5,
+            timingSamples: 10,
+          },
+        },
+      })
+      const collabHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: activeCollabData })
+      )
+      expect(collabHtml).toContain('Active Collab')
+    })
+
+    it('9. Zero, one, and two rendered badges produce valid UI', () => {
+      // 0 badges: Dormant user, stale repo, low impact, no streak, no estimate
+      const zeroBadgeData = makeMockDashboard({
+        repos: [
+          {
+            id: 501,
+            name: 'dormant-project',
+            html_url: 'https://github.com/cgupta21/dormant-project',
+            description: null,
+            language: null,
+            stargazers_count: 1,
+            forks_count: 0,
+            open_issues_count: 0,
+            updated_at: '2022-01-01T00:00:00Z',
+            pushed_at: '2022-01-01T00:00:00Z',
+            fork: false,
+            status: 'stale',
+          },
+        ],
+        contributions: {
+          days: [],
+          total: 0,
+          activeDays: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 5,
+          breakdown: { consistency: 0, collaboration: 0, impact: 10 },
+          raw: {
+            activeDays: 0,
+            totalContributions: 0,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 1,
+            forks: 0,
+            currentStreak: 0,
+            longestStreak: 0,
+            timingSamples: 0,
+          },
+        },
+        estimated: false,
+      })
+      const zeroHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: zeroBadgeData })
+      )
+      expect(zeroHtml).toContain('previewScoreTags')
+      expect(zeroHtml).not.toContain('previewTag')
+
+      // 1 badge: Stale repos, low impact, but active contributor -> Only Low Collaboration
+      const oneBadgeData = makeMockDashboard({
+        repos: [
+          {
+            id: 502,
+            name: 'old-project',
+            html_url: 'https://github.com/cgupta21/old-project',
+            description: null,
+            language: null,
+            stargazers_count: 2,
+            forks_count: 0,
+            open_issues_count: 0,
+            updated_at: '2022-01-01T00:00:00Z',
+            pushed_at: '2022-01-01T00:00:00Z',
+            fork: false,
+            status: 'stale',
+          },
+        ],
+        contributions: {
+          days: [{ date: '2026-10-10', contributionCount: 5, isObserved: true, weekday: 6 }],
+          total: 25,
+          activeDays: 8,
+          currentStreak: 2,
+          longestStreak: 3,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 30,
+          breakdown: { consistency: 40, collaboration: 10, impact: 15 },
+          raw: {
+            activeDays: 8,
+            totalContributions: 25,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 2,
+            forks: 0,
+            currentStreak: 2,
+            longestStreak: 3,
+            timingSamples: 5,
+          },
+        },
+        estimated: false,
+      })
+      const oneHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: oneBadgeData })
+      )
+      const oneMatches = oneHtml.match(/class="previewTag/g)
+      expect(oneMatches).toHaveLength(1)
+      expect(oneHtml).toContain('Low Collaboration')
+      expect(oneHtml).toContain('title="Limited collaboration signals in observed public activity"')
+      expect(oneHtml).not.toContain('Solo Cadence')
+
+      // 2 badges: Active low-collaboration developer with active maintained repo -> Low Collaboration + Active Maintenance
+      const twoBadgeData = makeMockDashboard({
+        repos: [
+          {
+            id: 503,
+            name: 'current-project',
+            html_url: 'https://github.com/cgupta21/current-project',
+            description: null,
+            language: null,
+            stargazers_count: 5,
+            forks_count: 0,
+            open_issues_count: 0,
+            updated_at: '2026-10-19T00:00:00Z',
+            pushed_at: '2026-10-19T00:00:00Z',
+            fork: false,
+            status: 'active',
+          },
+        ],
+        contributions: {
+          days: [{ date: '2026-10-10', contributionCount: 5, isObserved: true, weekday: 6 }],
+          total: 30,
+          activeDays: 10,
+          currentStreak: 2,
+          longestStreak: 4,
+          privateContributionCount: 0,
+        },
+        score: {
+          score: 40,
+          breakdown: { consistency: 50, collaboration: 10, impact: 20 },
+          raw: {
+            activeDays: 10,
+            totalContributions: 30,
+            prs: 0,
+            issues: 0,
+            reviews: 0,
+            stars: 5,
+            forks: 0,
+            currentStreak: 2,
+            longestStreak: 4,
+            timingSamples: 8,
+          },
+        },
+        estimated: false,
+      })
+      const twoHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, { data: twoBadgeData })
+      )
+      const twoMatches = twoHtml.match(/class="previewTag/g)
+      expect(twoMatches).toHaveLength(2)
+      expect(twoHtml).toContain('Low Collaboration')
+      expect(twoHtml).toContain('Active Maintenance')
+      expect(twoHtml).not.toContain('Solo Cadence')
+    })
+  })
 })

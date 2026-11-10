@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { ArrowLeftRight, Medal, Search, Users } from 'lucide-react'
+import { ArrowLeftRight, CheckCircle2, Info, Medal, Search, ShieldAlert, Users } from 'lucide-react'
 import type { CompareResponse, Dashboard } from '../types'
 import { compareDashboards } from '../hooks/useDashboard'
 import { compactNumber } from '../lib/analytics'
+import { compareMetric } from '../../../shared/intelligence.js'
 
 export type ScoringModelType = 'three_pillar' | 'two_pillar_renormalized' | 'unavailable'
 
@@ -117,6 +118,54 @@ export function CompareView({ initialLeft, initialRight }: { initialLeft: string
             <Medal size={18} />
             {getComparisonVerdict(result.left, result.right)}
           </div>
+          {result.left.intelligence && result.right.intelligence && (
+            <div className="dimensionalComparisonSection" style={{ gridColumn: '1 / -1', marginTop: '20px' }}>
+              <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem' }}>
+                <Info size={18} /> Multidimensional Metric Comparisons
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '12px' }}>
+                {[
+                  { key: 'account_followers', label: 'Current Followers' },
+                  { key: 'repo_total_stars', label: 'Repository Total Stars' },
+                  { key: 'repo_non_archived_stars', label: 'Non-Archived Stars' },
+                  { key: 'repo_archived_stars', label: 'Archived Stars' },
+                  { key: 'repo_forks', label: 'Forks Count' },
+                  {
+                    key: result.left.intelligence.activity.source === 'graphql_calendar' && result.right.intelligence.activity.source === 'graphql_calendar'
+                      ? 'graphql_recorded_contribution_days'
+                      : 'rest_observed_public_event_days',
+                    label: 'Observed Active Days'
+                  },
+                  { key: 'rest_pr_event_actions', label: 'PR Event Actions' }
+                ].map(({ key, label }) => {
+                  try {
+                    const comp = compareMetric(result.left, result.right, key)
+                    const winnerText = comp.eligible
+                      ? comp.winner === 'tie'
+                        ? 'Tie'
+                        : `${comp.winner === 'profile_a' ? result.left.user.login : result.right.user.login} leads`
+                      : 'Comparison Locked'
+
+                    return (
+                      <div key={key} className="previewMetricItem" style={{ padding: '12px', borderRadius: '8px', background: 'var(--card-subtle, rgba(255,255,255,0.03))' }}>
+                        <span className="metricLabel">{label}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '6px 0' }}>
+                          <span>{result.left.user.login}: <b>{comp.valueA != null ? comp.valueA.toLocaleString() : '—'}</b></span>
+                          <span>{result.right.user.login}: <b>{comp.valueB != null ? comp.valueB.toLocaleString() : '—'}</b></span>
+                        </div>
+                        <span className={`metricTrend ${comp.eligible ? 'positive' : ''}`} style={{ fontSize: '0.8rem' }}>
+                          {comp.eligible ? <CheckCircle2 size={12} style={{ display: 'inline', marginRight: 4 }} /> : <ShieldAlert size={12} style={{ display: 'inline', marginRight: 4 }} />}
+                          {winnerText} {comp.reason ? `(${comp.reason})` : ''}
+                        </span>
+                      </div>
+                    )
+                  } catch {
+                    return null
+                  }
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>

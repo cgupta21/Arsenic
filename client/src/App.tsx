@@ -1178,7 +1178,12 @@ function DashboardContent({
           <div className="shareCard" ref={shareRef} id="share-card">
             <div className="shareBrand"><img src="/assets/arsenic-mark.svg" alt="" /><span>ARSENIC</span></div>
             <div className="shareIdentity"><img src={user.avatar_url} alt="" crossOrigin="anonymous" /><div><h3>{user.name || user.login}</h3><span>@{user.login}</span></div><strong>{score.score != null ? score.score : '—'}</strong></div>
-            <div className="shareGrid"><div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div><div><b>{score.breakdown.consistency != null ? score.breakdown.consistency : '—'}</b><span>consistency</span></div><div><b>{score.breakdown.collaboration != null ? score.breakdown.collaboration : '—'}</b><span>collaboration</span></div><div><b>{score.breakdown.impact}</b><span>impact</span></div></div>
+            <div className="shareGrid">
+              <div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div>
+              <div><b>{data.intelligence ? compactNumber(data.intelligence.adoption.totalStargazersCount.value) : (score.breakdown.consistency != null ? score.breakdown.consistency : '—')}</b><span>{data.intelligence ? 'stars' : 'consistency'}</span></div>
+              <div><b>{data.intelligence ? data.intelligence.maintenance.activeCount.value : (score.breakdown.collaboration != null ? score.breakdown.collaboration : '—')}</b><span>{data.intelligence ? 'active repos' : 'collaboration'}</span></div>
+              <div><b>{data.intelligence ? compactNumber(data.intelligence.adoption.followersCount.value) : score.breakdown.impact}</b><span>{data.intelligence ? 'followers' : 'impact'}</span></div>
+            </div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>
           <ExportButtons targetId="share-card" />

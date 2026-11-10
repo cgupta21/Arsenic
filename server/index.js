@@ -12,6 +12,12 @@ import fs from 'node:fs'
 import { calculateScore as calculateScoreModel } from '../shared/score.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 import { isValidGitHubUsername, GITHUB_USERNAME_REGEX } from '../shared/validation.js'
+import {
+  validateMetricValue,
+  assertTelemetryIntegrity,
+  compareMetric,
+  METRIC_REGISTRY
+} from '../shared/intelligence.js'
 import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -230,9 +236,14 @@ function cacheKey(username, tierOrScope = 'public') {
 async function cachedDashboard(key, producer, onStoreKey = null) {
   const existing = cache.get(key)
   if (existing && existing.expires > Date.now()) {
-    const hit = clone(existing.value)
-    if (hit.api) hit.api.cached = true
-    return hit
+    // M-03 Cache Versioning: prevent legacy score-shaped cached payloads without intelligence from being returned
+    if (existing.value && !existing.value.intelligence) {
+      cache.delete(key)
+    } else {
+      const hit = clone(existing.value)
+      if (hit.api) hit.api.cached = true
+      return hit
+    }
   }
   if (cache.size > 500) {
     for (const [k, v] of cache) if (v.expires <= Date.now()) cache.delete(k)
@@ -460,6 +471,7 @@ async function fetchGraphQLBundle(username, authToken) {
     events: await fetchPublicEvents(username, authToken),
     contributions: first.contributionsCollection,
     graphqlRate: data.body.rateLimit,
+    totalRepoCount: first.repositories.totalCount
   }
 }
 
@@ -506,7 +518,8 @@ function contributionsFromEvents(events = [], options = {}) {
   // then earlier days were not observed due to GitHub event pagination limits.
   const isTruncated = eventsUnavailable
     ? true
-    : ((validEvents.length === 100 || validEvents.length >= 200) && oldestEventDate !== null && oldestEventDate > cutoffIso)
+    : (options.collectionState ? (options.collectionState === 'limit_reached' || options.collectionState === 'incomplete') : ((validEvents.length === 100 || validEvents.length >= 200) && oldestEventDate !== null && oldestEventDate > cutoffIso))
+  const collectionState = options.collectionState || (eventsUnavailable ? 'unavailable' : (isTruncated ? 'limit_reached' : 'complete'))
 
   const contributionDays = []
   for (let offset = windowDays - 1; offset >= 0; offset -= 1) {
@@ -535,6 +548,7 @@ function contributionsFromEvents(events = [], options = {}) {
       observationWindowDays: windowDays,
       isEstimated: true,
       isTruncated,
+      collectionState,
       eventsUnavailable,
       oldestEventDate,
       eventCount: validEvents.length,
@@ -574,21 +588,46 @@ async function fetchPublicBundle(username, authToken) {
 
   // Bounded public events pagination (at most page 2, up to 200 events total)
   const allEvents = [...events]
-  if (!eventsFailed && events.length === 100) {
-    const oldestP1 = events[events.length - 1]?.created_at
-    const oldestP1Time = oldestP1 ? new Date(oldestP1).getTime() : 0
+  let collectionState = 'complete'
+  if (eventsFailed) {
+    collectionState = 'unavailable'
+  } else {
     const ninetyDaysAgo = Date.now() - 90 * 86400000
-    if (!isNaN(oldestP1Time) && oldestP1Time > ninetyDaysAgo) {
-      try {
-        const { body: nextEvents } = await githubRest(
-          `/users/${encodeURIComponent(username)}/events/public?per_page=100&page=2`,
-          authToken
-        )
-        if (Array.isArray(nextEvents)) {
-          allEvents.push(...nextEvents)
+    if (events.length < 100) {
+      collectionState = 'complete'
+    } else {
+      const oldestP1 = events[events.length - 1]?.created_at
+      const oldestP1Time = oldestP1 ? new Date(oldestP1).getTime() : 0
+      if (!isNaN(oldestP1Time) && oldestP1Time <= ninetyDaysAgo) {
+        collectionState = 'complete'
+      } else {
+        let p2Success = false
+        try {
+          const { body: nextEvents } = await githubRest(
+            `/users/${encodeURIComponent(username)}/events/public?per_page=100&page=2`,
+            authToken
+          )
+          if (Array.isArray(nextEvents)) {
+            p2Success = true
+            allEvents.push(...nextEvents)
+            if (nextEvents.length < 100) {
+              collectionState = 'complete'
+            } else {
+              const oldestP2 = nextEvents[nextEvents.length - 1]?.created_at
+              const oldestP2Time = oldestP2 ? new Date(oldestP2).getTime() : 0
+              if (!isNaN(oldestP2Time) && oldestP2Time <= ninetyDaysAgo) {
+                collectionState = 'complete'
+              } else {
+                collectionState = 'limit_reached'
+              }
+            }
+          }
+        } catch {
+          // Page 2 failure is non-fatal
         }
-      } catch {
-        // Page 2 failure is non-fatal
+        if (!p2Success) {
+          collectionState = 'incomplete'
+        }
       }
     }
   }
@@ -597,11 +636,12 @@ async function fetchPublicBundle(username, authToken) {
     user,
     repos: recentRepos,
     events: eventsFailed ? [] : allEvents,
-    contributions: contributionsFromEvents(eventsFailed ? null : allEvents, { eventsUnavailable: eventsFailed }),
+    contributions: contributionsFromEvents(eventsFailed ? null : allEvents, { eventsUnavailable: eventsFailed, collectionState }),
     estimated: true,
     graphqlRate: null,
     restRate: eventsRate?.remaining ?? reposRate?.remaining ?? userRate?.remaining ?? null,
-    publicModeFallback: true
+    publicModeFallback: true,
+    collectionState
   }
 }
 
@@ -824,7 +864,7 @@ function normalizeRepo(repo) {
     updated_at: repo.updatedAt || repo.updated_at,
     pushed_at: repo.pushedAt || repo.pushed_at,
     fork: repo.isFork ?? repo.fork ?? false,
-    archived: Boolean(repo.isArchived),
+    archived: Boolean(repo.isArchived ?? repo.archived ?? false),
     languages: repo.languages?.edges || []
   }
 }
@@ -914,6 +954,231 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       }
     }
 
+    // M-03 Multidimensional Intelligence Construction
+    const now = new Date()
+    const endUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0))
+    const startUtc90 = new Date(endUtc.getTime() - 90 * 86400000)
+    const startUtc365 = new Date(endUtc.getTime() - 365 * 86400000)
+
+    const totalOwnedPublicRepos = user.public_repos || 0
+    const observedNonForkRepos = repos.length
+    const totalEligibleNonForkRepos = bundle.totalRepoCount != null ? bundle.totalRepoCount : (totalOwnedPublicRepos <= observedNonForkRepos ? observedNonForkRepos : null)
+    const isRepoCoverageComplete = totalEligibleNonForkRepos != null && totalEligibleNonForkRepos <= observedNonForkRepos
+
+    const repositoryCoverage = {
+      totalOwnedPublicRepos,
+      observedNonForkRepos,
+      totalEligibleNonForkRepos,
+      isComplete: isRepoCoverageComplete,
+      retrievalCap: 250
+    }
+
+    const archivedRepos = repos.filter((r) => r.archived)
+    const nonArchivedRepos = repos.filter((r) => !r.archived)
+    const archivedCount = archivedRepos.length
+    const archivedRepoStarsCount = archivedRepos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+    const nonArchivedRepoStarsCount = nonArchivedRepos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+    const totalStargazersCount = archivedRepoStarsCount + nonArchivedRepoStarsCount
+    const forksCount = repos.reduce((sum, r) => sum + (r.forks_count || 0), 0)
+    const followersCount = user.followers || 0
+
+    let activeCount = 0
+    let inactiveCount = 0
+    let unknownCount = 0
+
+    for (const repo of nonArchivedRepos) {
+      if (!repo.pushed_at) {
+        unknownCount += 1
+      } else {
+        const pushTime = new Date(repo.pushed_at).getTime()
+        if (isNaN(pushTime)) {
+          unknownCount += 1
+        } else if (pushTime >= startUtc90.getTime() && pushTime < endUtc.getTime()) {
+          activeCount += 1
+        } else {
+          inactiveCount += 1
+        }
+      }
+    }
+
+    const adoption = {
+      snapshotType: 'current_point_in_time',
+      repositoryCoverage,
+      totalStargazersCount: { state: totalStargazersCount > 0 ? 'observed' : 'zero', value: totalStargazersCount },
+      nonArchivedRepoStarsCount: { state: nonArchivedRepoStarsCount > 0 ? 'observed' : 'zero', value: nonArchivedRepoStarsCount },
+      archivedRepoStarsCount: { state: archivedRepoStarsCount > 0 ? 'observed' : 'zero', value: archivedRepoStarsCount },
+      forksCount: { state: forksCount > 0 ? 'observed' : 'zero', value: forksCount },
+      followersCount: { state: followersCount > 0 ? 'observed' : 'zero', value: followersCount }
+    }
+
+    const maintenance = {
+      repositoryCoverage,
+      observationWindowStart: startUtc90.toISOString(),
+      observationWindowEnd: endUtc.toISOString(),
+      observationWindowDays: 90,
+      activeCount: { state: activeCount > 0 ? 'observed' : 'zero', value: activeCount },
+      inactiveCount: { state: inactiveCount > 0 ? 'observed' : 'zero', value: inactiveCount },
+      archivedCount: { state: archivedCount > 0 ? 'observed' : 'zero', value: archivedCount },
+      unknownCount: { state: unknownCount > 0 ? 'observed' : 'zero', value: unknownCount }
+    }
+
+    let activity = null
+    let engagement = null
+
+    if (!isEstimated) {
+      activity = {
+        source: 'graphql_calendar',
+        observationWindowStart: startUtc365.toISOString(),
+        observationWindowEnd: endUtc.toISOString(),
+        observationWindowDays: 365,
+        recordedContributionDaysCount: {
+          state: (activeDays || 0) > 0 ? 'observed' : 'zero',
+          value: activeDays || 0,
+          observationWindowStart: startUtc365.toISOString(),
+          observationWindowEnd: endUtc.toISOString()
+        },
+        contributionCurrentStreakDays: {
+          state: (streaks.current || 0) > 0 ? 'observed' : 'zero',
+          value: streaks.current || 0
+        },
+        contributionLongestStreakDays: {
+          state: (streaks.longest || 0) > 0 ? 'observed' : 'zero',
+          value: streaks.longest || 0
+        },
+        totalRecordedContributions: {
+          state: (totalContrib || 0) > 0 ? 'observed' : 'zero',
+          value: totalContrib || 0
+        },
+        privateContributionsCount: includePrivate
+          ? (hasRestrictedCount && rawRestricted > 0
+              ? { state: 'observed', value: rawRestricted }
+              : { state: 'ambiguous_zero', value: 0, note: 'Zero or hidden by private contributions profile setting' })
+          : { state: 'unavailable', value: null, note: 'Private contributions unobserved without OAuth authorization' }
+      }
+
+      const prs = bundle.contributions?.totalPullRequestContributions || 0
+      const reviews = bundle.contributions?.totalPullRequestReviewContributions || 0
+      const issues = bundle.contributions?.totalIssueContributions || 0
+      engagement = {
+        source: 'rest_event_stream',
+        observationWindowStart: startUtc90.toISOString(),
+        observationWindowEnd: endUtc.toISOString(),
+        observationWindowDays: 90,
+        collectionState: 'complete',
+        retrievedEventsCount: (bundle.events || []).length,
+        pullRequestEventActionsCount: { state: prs > 0 ? 'observed' : 'zero', value: prs },
+        pullRequestReviewEventActionsCount: { state: reviews > 0 ? 'observed' : 'zero', value: reviews },
+        issueEventActionsCount: { state: issues > 0 ? 'observed' : 'zero', value: issues },
+        issueCommentEventActionsCount: { state: 'zero', value: 0 }
+      }
+    } else {
+      const restCollectionState = bundle.collectionState || dataQuality.collectionState || (eventsUnavailable ? 'unavailable' : (dataQuality.isTruncated ? 'limit_reached' : 'complete'))
+      const allEvents = bundle.events || []
+
+      if (restCollectionState === 'unavailable') {
+        activity = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: 'unavailable',
+          retrievedEventsCount: 0,
+          observedPublicEventDaysCount: { state: 'unavailable', value: null, note: 'Public events telemetry unavailable' },
+          observedPublicEventDateStreakDays: { state: 'unavailable', value: null, note: 'Public events telemetry unavailable' },
+          totalObservedPublicEvents: { state: 'unavailable', value: null, note: 'Public events telemetry unavailable' }
+        }
+        engagement = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: 'unavailable',
+          retrievedEventsCount: 0,
+          pullRequestEventActionsCount: { state: 'unavailable', value: null, note: 'Telemetry unavailable' },
+          pullRequestReviewEventActionsCount: { state: 'unavailable', value: null, note: 'Telemetry unavailable' },
+          issueEventActionsCount: { state: 'unavailable', value: null, note: 'Telemetry unavailable' },
+          issueCommentEventActionsCount: { state: 'unavailable', value: null, note: 'Telemetry unavailable' }
+        }
+      } else if (restCollectionState === 'limit_reached' || restCollectionState === 'incomplete') {
+        const isLimit = restCollectionState === 'limit_reached'
+        const note = isLimit
+          ? 'Activity reached 200-event retrieval limit (observed lower bound)'
+          : 'Event collection was interrupted mid-stream'
+
+        activity = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: restCollectionState,
+          retrievedEventsCount: allEvents.length,
+          observedPublicEventDaysCount: { state: 'partial', value: activeDays || 0, isLowerBound: true, note },
+          observedPublicEventDateStreakDays: { state: 'partial', value: streaks.longest || 0, isLowerBound: true, note },
+          totalObservedPublicEvents: { state: 'partial', value: allEvents.length, isLowerBound: true, note }
+        }
+
+        const prEvents = allEvents.filter((e) => e.type === 'PullRequestEvent').length
+        const reviewEvents = allEvents.filter((e) => e.type === 'PullRequestReviewEvent').length
+        const issueEvents = allEvents.filter((e) => e.type === 'IssuesEvent').length
+        const commentEvents = allEvents.filter((e) => e.type === 'IssueCommentEvent').length
+
+        engagement = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: restCollectionState,
+          retrievedEventsCount: allEvents.length,
+          pullRequestEventActionsCount: { state: 'partial', value: prEvents, isLowerBound: true, note },
+          pullRequestReviewEventActionsCount: { state: 'partial', value: reviewEvents, isLowerBound: true, note },
+          issueEventActionsCount: { state: 'partial', value: issueEvents, isLowerBound: true, note },
+          issueCommentEventActionsCount: { state: 'partial', value: commentEvents, isLowerBound: true, note }
+        }
+      } else {
+        // complete
+        activity = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: 'complete',
+          retrievedEventsCount: allEvents.length,
+          observedPublicEventDaysCount: { state: (activeDays || 0) > 0 ? 'observed' : 'zero', value: activeDays || 0 },
+          observedPublicEventDateStreakDays: { state: (streaks.longest || 0) > 0 ? 'observed' : 'zero', value: streaks.longest || 0 },
+          totalObservedPublicEvents: { state: allEvents.length > 0 ? 'observed' : 'zero', value: allEvents.length }
+        }
+
+        const prEvents = allEvents.filter((e) => e.type === 'PullRequestEvent').length
+        const reviewEvents = allEvents.filter((e) => e.type === 'PullRequestReviewEvent').length
+        const issueEvents = allEvents.filter((e) => e.type === 'IssuesEvent').length
+        const commentEvents = allEvents.filter((e) => e.type === 'IssueCommentEvent').length
+
+        engagement = {
+          source: 'rest_event_stream',
+          observationWindowStart: startUtc90.toISOString(),
+          observationWindowEnd: endUtc.toISOString(),
+          observationWindowDays: 90,
+          collectionState: 'complete',
+          retrievedEventsCount: allEvents.length,
+          pullRequestEventActionsCount: { state: prEvents > 0 ? 'observed' : 'zero', value: prEvents },
+          pullRequestReviewEventActionsCount: { state: reviewEvents > 0 ? 'observed' : 'zero', value: reviewEvents },
+          issueEventActionsCount: { state: issueEvents > 0 ? 'observed' : 'zero', value: issueEvents },
+          issueCommentEventActionsCount: { state: commentEvents > 0 ? 'observed' : 'zero', value: commentEvents }
+        }
+      }
+    }
+
+    const intelligence = {
+      schemaVersion: '3.2.0',
+      collectedAt: new Date().toISOString(),
+      activity,
+      adoption,
+      maintenance,
+      engagement
+    }
+
+    assertTelemetryIntegrity({ intelligence })
+
     return {
       user,
       repos: repoHealth,
@@ -931,6 +1196,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       languages,
       timing,
       score,
+      intelligence,
       authenticated: Boolean(authToken),
       estimated: isEstimated,
       privateContributions: Boolean(includePrivate),
@@ -1839,7 +2105,11 @@ export {
   setSummaryCache,
   contributionsFromEvents,
   buildDashboard,
-  calculateScore
+  calculateScore,
+  validateMetricValue,
+  assertTelemetryIntegrity,
+  compareMetric,
+  METRIC_REGISTRY
 }
 export default app
 

@@ -957,7 +957,11 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       totalStargazersCount: { state: totalStargazersCount > 0 ? 'observed' : 'zero', value: totalStargazersCount },
       nonArchivedRepoStarsCount: { state: nonArchivedRepoStarsCount > 0 ? 'observed' : 'zero', value: nonArchivedRepoStarsCount },
       archivedRepoStarsCount: { state: archivedRepoStarsCount > 0 ? 'observed' : 'zero', value: archivedRepoStarsCount },
-      forksCount: { state: forksCount > 0 ? 'observed' : 'zero', value: forksCount },
+      forksCount: { state: forksCount > 0 ? 'observed' : 'zero', value: forksCount }
+    }
+
+    const reach = {
+      snapshotType: 'current_point_in_time',
       followersCount: { state: followersCount > 0 ? 'observed' : 'zero', value: followersCount }
     }
 
@@ -1123,6 +1127,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       collectedAt: new Date().toISOString(),
       activity,
       adoption,
+      reach,
       maintenance,
       engagement
     }

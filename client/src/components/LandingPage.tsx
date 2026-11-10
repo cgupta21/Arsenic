@@ -161,7 +161,7 @@ export function LandingPage({
                   <div className="previewScoreValue">62</div>
                   <div className="previewScoreMeta">
                     <div className="scoreGrade">Recorded Contribution Days</div>
-                    <div className="scoreSubtext">Activity • Adoption • Maintenance • Community Engagement</div>
+                    <div className="scoreSubtext">Activity • Adoption • Reach • Maintenance • Community Engagement</div>
                   </div>
                 </div>
                 <div className="previewScoreTags">
@@ -275,7 +275,7 @@ export function LandingPage({
           </div>
           <div className="pillarText">
             <h3>Portfolio health</h3>
-            <p>Scoring across consistency, commit frequency, collaboration, and repository health.</p>
+            <p>Intelligence across activity, adoption, reach, maintenance, and community engagement.</p>
           </div>
         </div>
         <div className="pillarItem">

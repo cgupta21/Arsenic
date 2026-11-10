@@ -908,7 +908,10 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
             totalStargazersCount: { state: 'observed', value: 50 },
             nonArchivedRepoStarsCount: { state: 'observed', value: 50 },
             archivedRepoStarsCount: { state: 'zero', value: 0 },
-            forksCount: { state: 'observed', value: 10 },
+            forksCount: { state: 'observed', value: 10 }
+          },
+          reach: {
+            snapshotType: 'current_point_in_time',
             followersCount: { state: 'observed', value: 40 }
           },
           maintenance: {
@@ -1319,8 +1322,11 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
           },
           adoption: {
             ...makeDashboardFixture().intelligence!.adoption,
-            followersCount: { state: 'observed', value: 120 },
             totalStargazersCount: { state: 'observed', value: 80 }
+          },
+          reach: {
+            snapshotType: 'current_point_in_time',
+            followersCount: { state: 'observed', value: 120 }
           }
         }
       })
@@ -1340,8 +1346,11 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
           },
           adoption: {
             ...makeDashboardFixture().intelligence!.adoption,
-            followersCount: { state: 'observed', value: 45 },
             totalStargazersCount: { state: 'observed', value: 110 }
+          },
+          reach: {
+            snapshotType: 'current_point_in_time',
+            followersCount: { state: 'observed', value: 45 }
           }
         }
       })

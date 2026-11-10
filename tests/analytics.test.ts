@@ -69,6 +69,7 @@ describe('deterministic developer summary', () => {
     expect(summary).toContain('The Octocat')
     expect(summary).toContain('TypeScript')
     expect(summary).not.toMatch(/\byou\b/i)
-    expect(summary).toContain('68/100')
+    expect(summary).not.toContain('68/100')
+    expect(summary).toContain('verified repository')
   })
 })

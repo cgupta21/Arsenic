@@ -13,12 +13,13 @@ export function clamp(value: number, min = 0, max = 100) {
 }
 
 export function buildInsights(data: Dashboard) {
-  const { user, repos, languages, contributions, score } = data
+  const { user, repos, languages, contributions } = data
   const insights: string[] = []
   const stale = repos.filter((repo) => repo.status === 'stale').length
   const active = repos.filter((repo) => repo.status === 'active').length
 
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
+  const isTruncated = Boolean(data.dataQuality?.isTruncated)
 
   if (eventsUnavailable || contributions.activeDays == null) {
     insights.push(`Contribution cadence is currently unobserved due to limited public events data.`)
@@ -31,7 +32,7 @@ export function buildInsights(data: Dashboard) {
     insights.push(`${languages[0].name} leads by code volume across the analyzed repositories.`)
   }
   const engagement = data.intelligence?.engagement
-  if (engagement && engagement.collectionState === 'complete') {
+  if (engagement && engagement.collectionState === 'complete' && !isTruncated && !eventsUnavailable) {
     const prs = engagement.pullRequestEventActionsCount.value ?? 0
     const issues = engagement.issueEventActionsCount.value ?? 0
     const reviews = engagement.pullRequestReviewEventActionsCount.value ?? 0
@@ -39,12 +40,6 @@ export function buildInsights(data: Dashboard) {
       insights.push(`Public engagement is a strong signal, with ${prs} pull request actions, ${issues} issue actions and ${reviews} review actions observed.`)
     } else {
       insights.push(`Public engagement is developing, with ${prs} pull request actions and ${issues} issue actions recorded.`)
-    }
-  } else if (score?.breakdown?.collaboration != null) {
-    if (score.breakdown.collaboration >= 65) {
-      insights.push(`Collaboration is a strong signal, with ${score.raw?.prs ?? 0} pull requests, ${score.raw?.issues ?? 0} issues and ${score.raw?.reviews ?? 0} reviews in the contribution window.`)
-    } else {
-      insights.push(`Collaboration is currently lighter than coding activity, so issues and pull requests are a useful growth area.`)
     }
   }
   if (stale) {

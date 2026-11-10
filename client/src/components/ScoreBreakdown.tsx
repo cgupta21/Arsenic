@@ -1,4 +1,4 @@
-import { Activity, Award, GitPullRequest, FolderGit2, UsersRound, Zap, Target } from 'lucide-react'
+import { Activity, Award, GitPullRequest, FolderGit2, Users, UsersRound, Zap, Target } from 'lucide-react'
 import type { Dashboard } from '../types'
 import { compactNumber } from '../lib/analytics'
 
@@ -11,12 +11,15 @@ export interface ScoreBreakdownProps {
 export function ScoreBreakdown({ dashboard, score }: ScoreBreakdownProps) {
   const intel = dashboard?.intelligence
 
-  // If dashboard with multidimensional intelligence is available, render the 4 transparent dimensions
+  // If dashboard with multidimensional intelligence is available, render the 5 transparent dimensions
   if (intel) {
     const act = intel.activity
     const adopt = intel.adoption
+    const reach = intel.reach
     const maint = intel.maintenance
     const eng = intel.engagement
+
+    const reachFollowers = reach?.followersCount?.value ?? (adopt as unknown as { followersCount?: { value?: number } })?.followersCount?.value ?? 0
 
     const dimensions = [
       {
@@ -56,12 +59,21 @@ export function ScoreBreakdown({ dashboard, score }: ScoreBreakdownProps) {
         icon: Award,
         badge: `${compactNumber(adopt.totalStargazersCount.value ?? 0)} Stars`,
         stats: [
+          { label: 'Total Stars', value: compactNumber(adopt.totalStargazersCount.value ?? 0) },
           { label: 'Non-Archived Stars', value: compactNumber(adopt.nonArchivedRepoStarsCount.value ?? 0) },
           { label: 'Archived Stars', value: compactNumber(adopt.archivedRepoStarsCount.value ?? 0) },
-          { label: 'Forks Count', value: compactNumber(adopt.forksCount.value ?? 0) },
-          { label: 'Followers', value: compactNumber(adopt.followersCount.value ?? 0) }
+          { label: 'Forks Count', value: compactNumber(adopt.forksCount.value ?? 0) }
         ],
         note: 'Direct engagement across public repositories'
+      },
+      {
+        title: 'Account Reach',
+        icon: Users,
+        badge: `${compactNumber(reachFollowers)} Followers`,
+        stats: [
+          { label: 'Followers', value: compactNumber(reachFollowers) }
+        ],
+        note: 'Point-in-time public developer account reach'
       },
       {
         title: 'Repository Maintenance',

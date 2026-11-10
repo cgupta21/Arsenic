@@ -19,7 +19,6 @@ function getDensityLevelClass(day: { contributionCount: number; isObserved?: boo
 
 export function DeveloperIntelligenceOverview({ data, loading = false }: DeveloperIntelligenceOverviewProps) {
   const user = data.user
-  const score = data.score
   const intelligence = data.intelligence
   const repos = data.repos || []
   const days = data.contributions?.days || []
@@ -38,8 +37,8 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
     if (intelligence?.adoption?.totalStargazersCount?.value != null) {
       return intelligence.adoption.totalStargazersCount.value
     }
-    return score?.raw?.stars ?? repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
-  }, [intelligence?.adoption?.totalStargazersCount?.value, score?.raw?.stars, repos])
+    return repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+  }, [intelligence?.adoption?.totalStargazersCount?.value, repos])
 
   const nonForkReposCount = useMemo(() => {
     if (intelligence?.maintenance?.repositoryCoverage?.observedNonForkRepos != null) {
@@ -49,23 +48,23 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
   }, [intelligence?.maintenance?.repositoryCoverage?.observedNonForkRepos, repos])
 
   const activeDaysCount = useMemo(() => {
-    if (!intelligence) return data.contributions?.activeDays ?? score?.raw?.activeDays ?? null
+    if (!intelligence) return data.contributions?.activeDays ?? null
     if (intelligence.activity.source === 'graphql_calendar') {
       return intelligence.activity.recordedContributionDaysCount.value
     }
     return intelligence.activity.observedPublicEventDaysCount.value
-  }, [intelligence, data.contributions?.activeDays, score?.raw?.activeDays])
+  }, [intelligence, data.contributions?.activeDays])
 
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
 
   // Determine whether genuine positive contribution activity has been demonstrated
   const hasDemonstratedActivity = useMemo(() => {
     if (eventsUnavailable) return false
-    const total = data.contributions?.total ?? score?.raw?.totalContributions
-    const activeDays = data.contributions?.activeDays ?? score?.raw?.activeDays
-    const prs = score?.raw?.prs ?? intelligence?.engagement?.pullRequestEventActionsCount?.value
-    const issues = score?.raw?.issues ?? intelligence?.engagement?.issueEventActionsCount?.value
-    const reviews = score?.raw?.reviews ?? intelligence?.engagement?.pullRequestReviewEventActionsCount?.value
+    const total = data.contributions?.total
+    const activeDays = data.contributions?.activeDays
+    const prs = intelligence?.engagement?.pullRequestEventActionsCount?.value
+    const issues = intelligence?.engagement?.issueEventActionsCount?.value
+    const reviews = intelligence?.engagement?.pullRequestReviewEventActionsCount?.value
     const hasDayActivity = days.some((d) => (d.contributionCount || 0) > 0)
     return (
       (total != null && total > 0) ||
@@ -79,11 +78,6 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
     eventsUnavailable,
     data.contributions?.total,
     data.contributions?.activeDays,
-    score?.raw?.totalContributions,
-    score?.raw?.activeDays,
-    score?.raw?.prs,
-    score?.raw?.issues,
-    score?.raw?.reviews,
     intelligence?.engagement,
     days,
   ])
@@ -113,16 +107,16 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
         positive: true,
       }
     }
-    const prs = score?.raw?.prs ?? intelligence?.engagement?.pullRequestEventActionsCount?.value ?? 0
+    const prs = intelligence?.engagement?.pullRequestEventActionsCount?.value ?? 0
     if (prs > 0) {
       return { text: `${prs} PRs on record`, positive: false }
     }
     return { text: '0 recent contributions', positive: false }
-  }, [days, score?.raw?.prs, intelligence?.engagement?.pullRequestEventActionsCount?.value, eventsUnavailable, data.contributions.total])
+  }, [days, intelligence?.engagement?.pullRequestEventActionsCount?.value, eventsUnavailable, data.contributions.total])
 
   // PR velocity calculated over weeks in contribution window
   const prVelocityData = useMemo(() => {
-    const rawPrCount = score?.raw?.prs ?? intelligence?.engagement?.pullRequestEventActionsCount?.value
+    const rawPrCount = intelligence?.engagement?.pullRequestEventActionsCount?.value
     if (eventsUnavailable || rawPrCount == null) {
       return {
         velocity: '—',
@@ -159,7 +153,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
       subtext,
       positive,
     }
-  }, [score?.raw?.prs, intelligence?.engagement?.pullRequestEventActionsCount?.value, data.estimated, days.length, eventsUnavailable])
+  }, [intelligence?.engagement?.pullRequestEventActionsCount?.value, data.estimated, days.length, eventsUnavailable])
 
   // Recent 64 days for the 16x4 desktop / 8x8 mobile density grid
   const recentDensityDays = useMemo(() => {
@@ -219,29 +213,31 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
           {/* Top Score Strip with Transparent Multidimensional Intelligence */}
           {(() => {
             const engagement = intelligence?.engagement
-            const isCollabComplete = engagement
-              ? engagement.collectionState === 'complete'
-              : !data.dataQuality?.isTruncated && !eventsUnavailable
+            const isTruncated = Boolean(data.dataQuality?.isTruncated)
+            const isCollabComplete = Boolean(
+              engagement &&
+              engagement.collectionState === 'complete' &&
+              !isTruncated &&
+              !eventsUnavailable
+            )
 
-            const prCollabActions = engagement?.pullRequestEventActionsCount?.value ?? score?.raw?.prs ?? 0
-            const reviewCollabActions = engagement?.pullRequestReviewEventActionsCount?.value ?? score?.raw?.reviews ?? 0
+            const prCollabActions = isCollabComplete ? (engagement?.pullRequestEventActionsCount?.value ?? 0) : 0
+            const reviewCollabActions = isCollabComplete ? (engagement?.pullRequestReviewEventActionsCount?.value ?? 0) : 0
 
-            const isHighVelocity = !eventsUnavailable && (
-              (engagement ? prCollabActions >= 8 : (score?.breakdown?.collaboration != null && score.breakdown.collaboration >= 60)) ||
+            const isHighVelocity = !eventsUnavailable && isCollabComplete && (
+              prCollabActions >= 8 ||
               (prVelocityData.velocity !== '—' && Number(prVelocityData.velocity) >= 2)
             )
 
-            const isActiveCollab = !eventsUnavailable && !isHighVelocity && (
-              engagement
-                ? (prCollabActions + reviewCollabActions) >= 3
-                : (score?.breakdown?.collaboration != null && score.breakdown.collaboration >= 35)
+            const isActiveCollab = !eventsUnavailable && isCollabComplete && !isHighVelocity && (
+              (prCollabActions + reviewCollabActions) >= 3
             )
 
             const isLowCollab = !eventsUnavailable && isCollabComplete && hasDemonstratedActivity && (
-              engagement
-                ? (prCollabActions + reviewCollabActions) <= 1
-                : (score?.breakdown?.collaboration != null ? score.breakdown.collaboration < 35 : (prCollabActions + reviewCollabActions) <= 1)
+              (prCollabActions + reviewCollabActions) <= 1
             )
+
+            const reachFollowers = intelligence?.reach?.followersCount?.value ?? user.followers
 
             return (
               <div className="previewScoreStrip">
@@ -252,7 +248,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                   <div className="previewScoreMeta">
                     <div className="scoreGrade">Active Days Recorded</div>
                     <div className="scoreSubtext" data-testid="overview-score-breakdown">
-                      {activeDaysCount != null ? `${activeDaysCount} Active Days` : 'Activity Unobserved'} • {nonForkReposCount} Non-Fork Repos • {compactNumber(totalStars)} Stars • {compactNumber(user.followers)} Followers
+                      {activeDaysCount != null ? `${activeDaysCount} Active Days` : 'Activity Unobserved'} • {nonForkReposCount} Non-Fork Repos • {compactNumber(totalStars)} Stars • {compactNumber(reachFollowers)} Followers
                     </div>
                   </div>
                 </div>
@@ -284,7 +280,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                         <GitBranch size={12} aria-hidden="true" /> Active Maintenance
                       </span>
                     ) : null
-                  ) : (data.contributions?.currentStreak ?? 0) >= 7 || (intelligence ? (activeDaysCount != null && activeDaysCount >= 30) : (score?.breakdown?.consistency != null ? score.breakdown.consistency >= 75 : (activeDaysCount != null && activeDaysCount >= 30))) ? (
+                  ) : (data.contributions?.currentStreak ?? 0) >= 7 || (activeDaysCount != null && activeDaysCount >= 30) ? (
                     <span className="previewTag tagSand">
                       <GitBranch size={12} aria-hidden="true" /> Steady Cadence
                     </span>
@@ -298,7 +294,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                     <span className="previewTag tagTerracotta">
                       <Sparkles size={12} aria-hidden="true" /> Public Estimate
                     </span>
-                  ) : (intelligence ? (intelligence.adoption.totalStargazersCount.value != null && intelligence.adoption.totalStargazersCount.value >= 100) : (score?.breakdown?.impact != null ? score.breakdown.impact >= 60 : totalStars >= 100)) ? (
+                  ) : totalStars >= 100 ? (
                     <span className="previewTag tagTerracotta">
                       <Sparkles size={12} aria-hidden="true" /> High Reach
                     </span>

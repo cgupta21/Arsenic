@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import {
   validateMetricValue,
   compareMetric,
@@ -7,6 +9,11 @@ import {
   TelemetryIntegrityError
 } from '../shared/intelligence.js'
 import type { DeveloperIntelligence, MetricValue, RestActivityDimension } from '../shared/intelligence'
+import type { Dashboard } from '../client/src/types'
+import { ScoreBreakdown } from '../client/src/components/ScoreBreakdown'
+import { DeveloperIntelligenceOverview } from '../client/src/components/DeveloperIntelligenceOverview'
+import { generateDeveloperSummary } from '../shared/summary.js'
+import { buildInsights } from '../client/src/lib/analytics'
 
 function makeMockIntelligence(overrides: Partial<DeveloperIntelligence> = {}): DeveloperIntelligence {
   const now = new Date()
@@ -40,7 +47,10 @@ function makeMockIntelligence(overrides: Partial<DeveloperIntelligence> = {}): D
       totalStargazersCount: { state: 'observed', value: 340 },
       nonArchivedRepoStarsCount: { state: 'observed', value: 300 },
       archivedRepoStarsCount: { state: 'observed', value: 40 },
-      forksCount: { state: 'observed', value: 45 },
+      forksCount: { state: 'observed', value: 45 }
+    },
+    reach: {
+      snapshotType: 'current_point_in_time',
       followersCount: { state: 'observed', value: 150 }
     },
     maintenance: {
@@ -169,14 +179,14 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
   describe('Comparison Architecture & Eligibility Dispatch (TEST-COMPARE-07 to TEST-COMPARE-12)', () => {
     it('TEST-COMPARE-07: GraphQL activity vs REST activity follower comparison remains eligible', () => {
       const profileA = makeMockIntelligence({
-        adoption: {
-          ...makeMockIntelligence().adoption,
+        reach: {
+          snapshotType: 'current_point_in_time',
           followersCount: { state: 'observed', value: 250 }
         }
       })
       const profileB = makeMockRestIntelligence({
-        adoption: {
-          ...makeMockRestIntelligence().adoption,
+        reach: {
+          snapshotType: 'current_point_in_time',
           followersCount: { state: 'observed', value: 120 }
         }
       })
@@ -273,14 +283,14 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
 
     it('TEST-COMPARE-12: Unavailable metric value produces no winner', () => {
       const profileA = makeMockIntelligence({
-        adoption: {
-          ...makeMockIntelligence().adoption,
+        reach: {
+          snapshotType: 'current_point_in_time',
           followersCount: { state: 'observed', value: 100 }
         }
       })
       const profileB = makeMockIntelligence({
-        adoption: {
-          ...makeMockIntelligence().adoption,
+        reach: {
+          snapshotType: 'current_point_in_time',
           followersCount: { state: 'unavailable', value: null, note: 'Rate limit exceeded' }
         }
       })
@@ -370,6 +380,136 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
 
       expect(endUtc.getTime() - startUtc365.getTime()).toBe(365 * 86400000)
       expect(endUtc.getTime() - startUtc365.getTime()).toBe(31536000000)
+    })
+  })
+
+  describe('Five-Dimensional Architecture & Complete Score Retirement Regressions', () => {
+    function makeTestDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
+      return {
+        user: {
+          login: 'dev',
+          name: 'Developer',
+          avatar_url: '',
+          bio: null,
+          html_url: '',
+          public_repos: 1,
+          followers: 100,
+          following: 10,
+          created_at: null,
+          location: null,
+          blog: null
+        },
+        repos: [],
+        events: [],
+        contributions: {
+          days: [],
+          total: 100,
+          activeDays: 20,
+          currentStreak: 2,
+          longestStreak: 5,
+          privateContributionCount: 0
+        },
+        languages: [],
+        timing: { commitsSampled: 0, hours: Array.from({ length: 24 }, () => 0), weekdays: Array.from({ length: 7 }, () => 0) },
+        authenticated: true,
+        estimated: false,
+        privateContributions: false,
+        api: { cached: false, cacheTtlSeconds: 600, graphqlRemaining: null, graphqlReset: null, restRemaining: null },
+        intelligence: makeMockIntelligence(),
+        ...overrides
+      }
+    }
+
+    it('reach exists independently in the intelligence payload and followersCount is not in adoption', () => {
+      const intel = makeMockIntelligence()
+      expect(intel.reach).toBeDefined()
+      expect(intel.reach.followersCount.state).toBe('observed')
+      expect(intel.reach.followersCount.value).toBe(150)
+      expect((intel.adoption as unknown as { followersCount?: unknown }).followersCount).toBeUndefined()
+    })
+
+    it('followers remain comparable across different activity sources and windows', () => {
+      const graphqlProfile = makeMockIntelligence({
+        reach: { snapshotType: 'current_point_in_time', followersCount: { state: 'observed', value: 300 } }
+      })
+      const restProfile = makeMockRestIntelligence({
+        reach: { snapshotType: 'current_point_in_time', followersCount: { state: 'observed', value: 100 } }
+      })
+      const res = compareMetric(graphqlProfile, restProfile, 'account_followers')
+      expect(res.eligible).toBe(true)
+      expect(res.winner).toBe('profile_a')
+    })
+
+    it('ScoreBreakdown renders all five dimensions independently', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, { dashboard: makeTestDashboard() })
+      )
+      expect(html).toContain('Contribution Activity')
+      expect(html).toContain('Repository Adoption')
+      expect(html).toContain('Account Reach')
+      expect(html).toContain('Repository Maintenance')
+      expect(html).toContain('Community Engagement')
+    })
+
+    it('Low Collaboration is never awarded when engagement is missing or truncated', () => {
+      const missingEngagementHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              engagement: undefined as unknown as DeveloperIntelligence['engagement']
+            }
+          })
+        })
+      )
+      expect(missingEngagementHtml).not.toContain('Low Collaboration')
+
+      const truncatedEngagementHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            dataQuality: { isTruncated: true, eventsUnavailable: false, observationWindowDays: 90, isEstimated: false, oldestEventDate: null, eventCount: 200, observedDaysCount: 90 },
+            intelligence: makeMockRestIntelligence()
+          })
+        })
+      )
+      expect(truncatedEngagementHtml).not.toContain('Low Collaboration')
+    })
+
+    it('summary generation never produces /100 score claim or fabricates zero values', () => {
+      const summary = generateDeveloperSummary({
+        user: { login: 'dev', name: 'Dev', followers: 200, public_repos: 1, avatar_url: '', bio: null, html_url: '', following: 0, created_at: null, location: null, blog: null },
+        repos: [{ id: 1, name: 'r', html_url: '', description: null, language: 'Rust', stargazers_count: 50, forks_count: 10, open_issues_count: 0, updated_at: '', pushed_at: '', fork: false, status: 'active' }],
+        languages: [{ name: 'Rust', size: 1000 }],
+        contributions: { days: [], total: null, activeDays: null, currentStreak: 0, longestStreak: 0, privateContributionCount: 0 },
+        dataQuality: { eventsUnavailable: true, isTruncated: true, observationWindowDays: 90, isEstimated: true, oldestEventDate: null, eventCount: 0, observedDaysCount: 0 }
+      })
+      expect(summary).not.toContain('/100')
+      expect(summary).not.toContain('score')
+      expect(summary).not.toContain('0 contributions')
+      expect(summary).not.toContain('0 active')
+    })
+
+    it('buildInsights has no score dependency and requires complete telemetry for engagement insight', () => {
+      const insightsMissing = buildInsights(makeTestDashboard({
+        dataQuality: { eventsUnavailable: false, isTruncated: true, observationWindowDays: 90, isEstimated: false, oldestEventDate: null, eventCount: 200, observedDaysCount: 90 },
+        intelligence: {
+          ...makeMockIntelligence(),
+          engagement: {
+            source: 'rest_event_stream',
+            observationWindowStart: '2026-07-22T00:00:00Z',
+            observationWindowEnd: '2026-10-20T00:00:00Z',
+            observationWindowDays: 90,
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200,
+            pullRequestEventActionsCount: { state: 'partial', value: 1, isLowerBound: true, note: 'truncated' },
+            issueEventActionsCount: { state: 'partial', value: 0, isLowerBound: true, note: 'truncated' },
+            pullRequestReviewEventActionsCount: { state: 'partial', value: 0, isLowerBound: true, note: 'truncated' },
+            issueCommentEventActionsCount: { state: 'zero', value: 0 }
+          }
+        }
+      }))
+      const collabInsights = insightsMissing.filter(i => i.includes('engagement') || i.includes('Collaboration'))
+      expect(collabInsights).toHaveLength(0)
     })
   })
 })

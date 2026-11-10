@@ -1187,7 +1187,7 @@ function DashboardContent({
               <div><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b><span>contributions</span></div>
               <div><b>{data.intelligence ? compactNumber(data.intelligence.adoption.totalStargazersCount.value) : compactNumber(data.repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0))}</b><span>stars</span></div>
               <div><b>{data.intelligence ? data.intelligence.maintenance.activeCount.value : data.repos.filter((r) => r.status === 'active').length}</b><span>active repos</span></div>
-              <div><b>{data.intelligence ? compactNumber(data.intelligence.adoption.followersCount.value ?? 0) : compactNumber(user.followers)}</b><span>followers</span></div>
+              <div><b>{data.intelligence ? compactNumber(data.intelligence.reach?.followersCount?.value ?? user.followers) : compactNumber(user.followers)}</b><span>followers</span></div>
             </div>
             <div className="shareFooter">GitHub Developer Intelligence · arsenic</div>
           </div>

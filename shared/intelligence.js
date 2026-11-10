@@ -151,7 +151,7 @@ export function assertTelemetryIntegrity(profile) {
  * Declarative Metric Comparison Registry
  */
 export const METRIC_REGISTRY = new Map([
-  // ─── 1. Account Adoption (Snapshots: Source-Agnostic, Window-Agnostic) ───
+  // ─── 1. Account Reach (Snapshots: Source-Agnostic, Window-Agnostic) ───
   [
     'account_followers',
     {
@@ -160,7 +160,7 @@ export const METRIC_REGISTRY = new Map([
       requiresWindowParity: false,
       requiresCompleteRepoCoverage: false,
       winnerPermitted: true,
-      extractMetric: (p) => (p.intelligence || p).adoption?.currentFollowersCount ?? (p.intelligence || p).adoption?.followersCount ?? null
+      extractMetric: (p) => (p.intelligence || p).reach?.followersCount ?? (p.intelligence || p).adoption?.followersCount ?? null
     }
   ],
 

@@ -60,6 +60,10 @@ export interface RepositoryAdoptionDimension {
   nonArchivedRepoStarsCount: MetricValue<number>;
   archivedRepoStarsCount: MetricValue<number>;
   forksCount: MetricValue<number>;
+}
+
+export interface AccountReachDimension {
+  snapshotType: 'current_point_in_time';
   followersCount: MetricValue<number>;
 }
 
@@ -92,6 +96,7 @@ export interface DeveloperIntelligence {
   collectedAt: string;
   activity: ContributionActivityDimension;
   adoption: RepositoryAdoptionDimension;
+  reach: AccountReachDimension;
   maintenance: RepositoryMaintenanceDimension;
   engagement: CommunityEngagementDimension;
 }

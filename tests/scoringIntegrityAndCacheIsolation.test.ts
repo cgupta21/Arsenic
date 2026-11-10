@@ -13,7 +13,8 @@ import { generateDeveloperSummary } from '../shared/summary.js'
 import { DeveloperIntelligenceOverview } from '../client/src/components/DeveloperIntelligenceOverview'
 import { ContributionHeatmap } from '../client/src/components/ContributionHeatmap'
 import { ScoreBreakdown } from '../client/src/components/ScoreBreakdown'
-import { resolveScoringModel, getComparisonVerdict } from '../client/src/components/CompareView'
+import { compareMetric } from '../shared/intelligence.js'
+import type { DeveloperIntelligence, RestActivityDimension } from '../shared/intelligence'
 import { buildInsights } from '../client/src/lib/analytics'
 import type { Dashboard } from '../client/src/types'
 
@@ -56,26 +57,7 @@ interface ServerModule {
     }
   }
   buildDashboard: (username: string, authToken: string | null, includePrivate?: boolean) => Promise<Record<string, unknown>>
-  calculateScore: (input: Record<string, unknown>) => {
-    score: number | null
-    breakdown: { consistency: number | null; collaboration: number | null; impact: number }
-    observationWindowDays: number
-    targetActiveDays: number
-    raw: {
-      activeDays: number | null
-      totalContributions: number | null
-      prs: number | null
-      issues: number | null
-      reviews: number | null
-      stars: number
-      forks: number
-      currentStreak: number
-      longestStreak: number
-      timingSamples: number
-      observationWindowDays: number
-      targetActiveDays: number
-    }
-  }
+  calculateScore?: (input: Record<string, unknown>) => unknown
   userCanSeePrivate: (req: unknown, username: string) => boolean
   isSelfUser: (req: unknown, username: string) => boolean
 }
@@ -381,11 +363,11 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
   // -------------------------------------------------------------------------
   describe('5. Estimated and GraphQL Cache Isolation', () => {
     it('generates distinct cache keys for private, verified, and estimated tiers', () => {
-      expect(cacheKey('torvalds', 'private')).toBe('torvalds::private')
-      expect(cacheKey('torvalds', true)).toBe('torvalds::private')
-      expect(cacheKey('torvalds', 'verified')).toBe('torvalds::verified')
-      expect(cacheKey('torvalds', 'estimated')).toBe('torvalds::estimated')
-      expect(cacheKey('torvalds', 'public')).toBe('torvalds::public')
+      expect(cacheKey('torvalds', 'private')).toBe('v3:torvalds::private')
+      expect(cacheKey('torvalds', true)).toBe('v3:torvalds::private')
+      expect(cacheKey('torvalds', 'verified')).toBe('v3:torvalds::verified')
+      expect(cacheKey('torvalds', 'estimated')).toBe('v3:torvalds::estimated')
+      expect(cacheKey('torvalds', 'public')).toBe('v3:torvalds::public')
     })
 
     it('ensures a cached estimated result does NOT satisfy a verified GraphQL lookup', async () => {
@@ -526,24 +508,8 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       expect(score.breakdown.impact).toBeGreaterThan(0)
     })
 
-    it('calculateScore wrapper propagates eventsUnavailable and nulls metrics', () => {
-      const res = calculateScore({
-        contributions: {
-          contributionCalendar: { totalContributions: null, weeks: [] }
-        },
-        repos: [{ stargazers_count: 50, forks_count: 5 }],
-        followers: 10,
-        timing: { commitsSampled: 0 },
-        observationWindowDays: 90,
-        dataQuality: { eventsUnavailable: true, isTruncated: true }
-      })
-
-      expect(res.score).toBeNull()
-      expect(res.breakdown.consistency).toBeNull()
-      expect(res.breakdown.collaboration).toBeNull()
-      expect(res.breakdown.impact).toBeGreaterThan(0)
-      expect(res.raw.activeDays).toBeNull()
-      expect(res.raw.totalContributions).toBeNull()
+    it('calculateScore wrapper is retired from server exports in M-03', () => {
+      expect(calculateScore).toBeUndefined()
     })
 
     it('summary generator handles eventsUnavailable gracefully without claiming zero activity', () => {
@@ -627,8 +593,8 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       const guestData = guestRes.json()
       expect(guestData.estimated).toBe(true)
       expect(guestData.dataQuality).toBeDefined()
-      expect(cache.has(`${targetUser}::estimated`)).toBe(true)
-      expect(cache.has(`${targetUser}::verified`)).toBe(false)
+      expect(cache.has(`v3:${targetUser}::estimated`)).toBe(true)
+      expect(cache.has(`v3:${targetUser}::verified`)).toBe(false)
       expect(restEventsCalled).toBe(true)
 
       // 2. Authenticated request for targetUser's profile
@@ -646,8 +612,8 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       const authData = authRes.json()
       expect(authData.estimated).toBe(false)
       expect(graphqlCalled).toBe(true)
-      expect(cache.has(`${targetUser}::verified`)).toBe(true)
-      expect(cache.has(`${targetUser}::estimated`)).toBe(true)
+      expect(cache.has(`v3:${targetUser}::verified`)).toBe(true)
+      expect(cache.has(`v3:${targetUser}::estimated`)).toBe(true)
     })
 
     it('Requirement 2: GraphQL 429 and 500 failures fall back to estimated REST data and store under estimated cache tier', async () => {
@@ -693,9 +659,9 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       const data = res.json()
       expect(data.estimated).toBe(true)
       // Stored in ::estimated tier
-      expect(cache.has(`${targetUser}::estimated`)).toBe(true)
+      expect(cache.has(`v3:${targetUser}::estimated`)).toBe(true)
       // ::verified tier was NOT poisoned
-      expect(cache.has(`${targetUser}::verified`)).toBe(false)
+      expect(cache.has(`v3:${targetUser}::verified`)).toBe(false)
     })
 
     it('Requirement 3: Public events pagination fetches page 2 when appropriate and never fetches page 3', async () => {
@@ -751,9 +717,13 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       const dq = data.dataQuality as Record<string, unknown>
       expect(dq.eventCount).toBe(200)
       expect(dq.isTruncated).toBe(true)
-      // In truncated feeds, collaboration is marked unavailable
-      const breakdown = (data.score as Record<string, unknown>).breakdown as Record<string, unknown>
-      expect(breakdown.collaboration).toBeNull()
+      // M-03 Score retirement: score is retired from API responses, replaced with multidimensional intelligence
+      expect(data.score).toBeUndefined()
+      expect(data.intelligence).toBeDefined()
+      const intel = data.intelligence as DeveloperIntelligence
+      const act = intel.activity as RestActivityDimension
+      expect(act.collectionState).toBe('limit_reached')
+      expect(intel.engagement.collectionState).toBe('limit_reached')
     })
 
     it('Requirement 4: Failed page-one events retrieval does not produce a confirmed zero-activity dashboard', async () => {
@@ -794,12 +764,13 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       expect(contribs.total).toBeNull()
       expect(contribs.activeDays).toBeNull()
 
-      const score = data.score as Record<string, unknown>
-      expect(score.score).toBeNull()
-      const breakdown = score.breakdown as Record<string, unknown>
-      expect(breakdown.consistency).toBeNull()
-      expect(breakdown.collaboration).toBeNull()
-      expect(breakdown.impact).toBeGreaterThan(0)
+      // M-03 Score retirement: score is retired from API responses, replaced with multidimensional intelligence
+      expect(data.score).toBeUndefined()
+      expect(data.intelligence).toBeDefined()
+      const intel = data.intelligence as DeveloperIntelligence
+      const act = intel.activity as RestActivityDimension
+      expect(act.collectionState).toBe('unavailable')
+      expect(act.observedPublicEventDaysCount.state).toBe('unavailable')
     })
 
     it('Requirement 5: An unauthenticated request cannot receive private cached data', async () => {
@@ -844,6 +815,21 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
   // 9. Frontend and Summary Defect Regression Tests
   // -------------------------------------------------------------------------
   describe('9. Frontend and Summary Defect Regression Tests', () => {
+    function makeRestActivity(overrides: Partial<RestActivityDimension> = {}): RestActivityDimension {
+      return {
+        source: 'rest_event_stream',
+        collectionState: 'complete',
+        retrievedEventsCount: 180,
+        observationWindowStart: '2026-08-03T00:00:00.000Z',
+        observationWindowEnd: '2026-11-01T00:00:00.000Z',
+        observationWindowDays: 90,
+        observedPublicEventDaysCount: { state: 'observed', value: 45 },
+        observedPublicEventDateStreakDays: { state: 'observed', value: 12 },
+        totalObservedPublicEvents: { state: 'observed', value: 180 },
+        ...overrides
+      }
+    }
+
     function makeDashboardFixture(overrides: Partial<Dashboard> = {}): Dashboard {
       const base: Dashboard = {
         user: {
@@ -905,6 +891,54 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
           commitsSampled: 25,
           hours: Array.from({ length: 24 }, (_, i) => (i === 14 ? 15 : 0)),
           weekdays: Array.from({ length: 7 }, (_, i) => (i === 2 ? 20 : 0))
+        },
+        intelligence: {
+          schemaVersion: '3.2.0',
+          collectedAt: '2026-11-01T00:00:00.000Z',
+          activity: makeRestActivity(),
+          adoption: {
+            snapshotType: 'current_point_in_time',
+            repositoryCoverage: {
+              totalOwnedPublicRepos: 1,
+              observedNonForkRepos: 1,
+              totalEligibleNonForkRepos: 1,
+              isComplete: true,
+              retrievalCap: 250
+            },
+            totalStargazersCount: { state: 'observed', value: 50 },
+            nonArchivedRepoStarsCount: { state: 'observed', value: 50 },
+            archivedRepoStarsCount: { state: 'zero', value: 0 },
+            forksCount: { state: 'observed', value: 10 },
+            followersCount: { state: 'observed', value: 40 }
+          },
+          maintenance: {
+            repositoryCoverage: {
+              totalOwnedPublicRepos: 1,
+              observedNonForkRepos: 1,
+              totalEligibleNonForkRepos: 1,
+              isComplete: true,
+              retrievalCap: 250
+            },
+            observationWindowStart: '2026-08-03T00:00:00.000Z',
+            observationWindowEnd: '2026-11-01T00:00:00.000Z',
+            observationWindowDays: 90,
+            activeCount: { state: 'observed', value: 1 },
+            inactiveCount: { state: 'zero', value: 0 },
+            archivedCount: { state: 'zero', value: 0 },
+            unknownCount: { state: 'zero', value: 0 }
+          },
+          engagement: {
+            source: 'rest_event_stream',
+            collectionState: 'complete',
+            retrievedEventsCount: 180,
+            observationWindowStart: '2026-08-03T00:00:00.000Z',
+            observationWindowEnd: '2026-11-01T00:00:00.000Z',
+            observationWindowDays: 90,
+            pullRequestEventActionsCount: { state: 'observed', value: 5 },
+            pullRequestReviewEventActionsCount: { state: 'observed', value: 5 },
+            issueEventActionsCount: { state: 'observed', value: 5 },
+            issueCommentEventActionsCount: { state: 'zero', value: 0 }
+          }
         },
         score: {
           score: 75,
@@ -1146,240 +1180,217 @@ describe('M-01: Contribution Scoring Integrity, Data Quality & Cache Isolation',
       expect(zeroHtml).not.toContain('levelUnobserved')
     })
 
-    // Requirement 6: Complete-model vs truncated-model comparisons cannot declare an overall winner
-    it('6. Cannot declare an overall winner when comparing complete and truncated models', () => {
+    // Requirement 6: Multidimensional metric comparison prohibits declaring an overall winner when comparing incompatible sources
+    it('6. Cannot compare activity metrics between incompatible data sources', () => {
       const completeProfile = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'alice' },
-        score: {
-          score: 72,
-          scoringModel: 'three_pillar',
-          breakdown: { consistency: 80, collaboration: 60, impact: 70 },
-          raw: { ...makeDashboardFixture().score.raw }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: {
+            source: 'graphql_calendar',
+            observationWindowStart: '2025-11-01T00:00:00.000Z',
+            observationWindowEnd: '2026-11-01T00:00:00.000Z',
+            observationWindowDays: 365,
+            recordedContributionDaysCount: { state: 'observed', value: 60 },
+            contributionCurrentStreakDays: { state: 'observed', value: 5 },
+            contributionLongestStreakDays: { state: 'observed', value: 12 },
+            totalRecordedContributions: { state: 'observed', value: 180 },
+            privateContributionsCount: { state: 'unavailable', value: null, note: 'none' }
+          }
         }
       })
 
-      const truncatedProfile = makeDashboardFixture({
+      const restProfile = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'bob' },
-        score: {
-          score: 86,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 95, collaboration: null, impact: 70 },
-          raw: { ...makeDashboardFixture().score.raw }
-        },
-        dataQuality: {
-          observationWindowDays: 90,
-          isEstimated: true,
-          isTruncated: true,
-          eventsUnavailable: false,
-          oldestEventDate: '2026-10-15',
-          eventCount: 150
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            observedPublicEventDaysCount: { state: 'observed', value: 60 }
+          })
         }
       })
 
-      expect(resolveScoringModel(completeProfile)).toBe('three_pillar')
-      expect(resolveScoringModel(truncatedProfile)).toBe('two_pillar_renormalized')
+      const compGraphql = compareMetric(completeProfile, restProfile, 'graphql_recorded_contribution_days')
+      expect(compGraphql.eligible).toBe(false)
+      expect(compGraphql.reason).toContain('source')
 
-      const verdict = getComparisonVerdict(completeProfile, truncatedProfile)
-      expect(verdict).toContain('Overall score comparison disabled')
-      expect(verdict).toContain('incompatible scoring models')
-      expect(verdict).not.toContain('leads by overall score')
+      const compRest = compareMetric(completeProfile, restProfile, 'rest_observed_public_event_days')
+      expect(compRest.eligible).toBe(false)
+      expect(compRest.reason).toContain('source')
     })
 
-    // Requirement 7: Comparison Fairness Policy
-    it('7. Complete vs complete can declare a winner or tie; truncated vs truncated always disables winner', () => {
+    // Requirement 7: Metric Comparison Winner Policy
+    it('7. Metric comparison declares winner or tie on eligible metrics; incomplete activity always locks comparison', () => {
       const aliceComplete = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'alice' },
-        score: {
-          score: 85,
-          scoringModel: 'three_pillar',
-          breakdown: { consistency: 90, collaboration: 80, impact: 85 },
-          raw: { ...makeDashboardFixture().score.raw }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          adoption: {
+            ...makeDashboardFixture().intelligence!.adoption,
+            totalStargazersCount: { state: 'observed', value: 150 }
+          }
         }
       })
 
       const bobComplete = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'bob' },
-        score: {
-          score: 70,
-          scoringModel: 'three_pillar',
-          breakdown: { consistency: 75, collaboration: 60, impact: 75 },
-          raw: { ...makeDashboardFixture().score.raw }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          adoption: {
+            ...makeDashboardFixture().intelligence!.adoption,
+            totalStargazersCount: { state: 'observed', value: 50 }
+          }
         }
       })
 
       const tieComplete = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'charlie' },
-        score: {
-          score: 85,
-          scoringModel: 'three_pillar',
-          breakdown: { consistency: 90, collaboration: 80, impact: 85 },
-          raw: { ...makeDashboardFixture().score.raw }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          adoption: {
+            ...makeDashboardFixture().intelligence!.adoption,
+            totalStargazersCount: { state: 'observed', value: 150 }
+          }
         }
       })
 
-      // Complete vs complete: normal winner/tie behavior
-      expect(getComparisonVerdict(aliceComplete, bobComplete)).toBe('alice leads by overall score')
-      expect(getComparisonVerdict(aliceComplete, tieComplete)).toBe('Tie on Arsenic score')
+      // Complete vs complete: metric winner / tie behavior
+      const compAliceBob = compareMetric(aliceComplete, bobComplete, 'repo_total_stars')
+      expect(compAliceBob.eligible).toBe(true)
+      expect(compAliceBob.winner).toBe('profile_a')
 
-      // Truncated 12-day vs truncated 75-day: cannot declare overall winner
+      const compAliceTie = compareMetric(aliceComplete, tieComplete, 'repo_total_stars')
+      expect(compAliceTie.eligible).toBe(true)
+      expect(compAliceTie.winner).toBe('tie')
+
+      // Truncated / limit_reached activity stream: cannot declare activity winner
       const truncated12d = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'alice' },
-        score: {
-          score: 89,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 100, collaboration: null, impact: 70 },
-          raw: { ...makeDashboardFixture().score.raw }
-        },
-        dataQuality: {
-          ...makeDashboardFixture().dataQuality!,
-          isTruncated: true,
-          observedDaysCount: 12
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200,
+            observedPublicEventDaysCount: { state: 'partial', value: 12, isLowerBound: true, note: 'truncated' }
+          }),
+          engagement: {
+            ...makeDashboardFixture().intelligence!.engagement,
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          }
         }
       })
 
       const truncated75d = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'bob' },
-        score: {
-          score: 77,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 81, collaboration: null, impact: 70 },
-          raw: { ...makeDashboardFixture().score.raw }
-        },
-        dataQuality: {
-          ...makeDashboardFixture().dataQuality!,
-          isTruncated: true,
-          observedDaysCount: 75
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200,
+            observedPublicEventDaysCount: { state: 'partial', value: 75, isLowerBound: true, note: 'truncated' }
+          }),
+          engagement: {
+            ...makeDashboardFixture().intelligence!.engagement,
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          }
         }
       })
 
-      const verdict12vs75 = getComparisonVerdict(truncated12d, truncated75d)
-      expect(verdict12vs75).toContain('Overall score comparison disabled')
-      expect(verdict12vs75).toContain('truncated contribution telemetry')
-      expect(verdict12vs75).not.toContain('leads by overall score')
-
-      // Truncated 75-day vs truncated 80-day: cannot declare overall winner
-      const truncated80d = makeDashboardFixture({
-        user: { ...makeDashboardFixture().user, login: 'charlie' },
-        score: {
-          score: 80,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 85, collaboration: null, impact: 72 },
-          raw: { ...makeDashboardFixture().score.raw }
-        },
-        dataQuality: {
-          ...makeDashboardFixture().dataQuality!,
-          isTruncated: true,
-          observedDaysCount: 80
-        }
-      })
-
-      const verdict75vs80 = getComparisonVerdict(truncated75d, truncated80d)
-      expect(verdict75vs80).toContain('Overall score comparison disabled')
-      expect(verdict75vs80).toContain('truncated contribution telemetry')
-      expect(verdict75vs80).not.toContain('leads by overall score')
-
-      // Truncated vs truncated with equal window: cannot declare overall winner
-      const truncatedEqual = makeDashboardFixture({
-        user: { ...makeDashboardFixture().user, login: 'dave' },
-        score: {
-          score: 65,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 70, collaboration: null, impact: 55 },
-          raw: { ...makeDashboardFixture().score.raw }
-        },
-        dataQuality: {
-          ...makeDashboardFixture().dataQuality!,
-          isTruncated: true,
-          observedDaysCount: 75
-        }
-      })
-
-      const verdictEqual = getComparisonVerdict(truncated75d, truncatedEqual)
-      expect(verdictEqual).toContain('Overall score comparison disabled')
-      expect(verdictEqual).toContain('truncated contribution telemetry')
-      expect(verdictEqual).not.toContain('leads by overall score')
+      const compTruncated = compareMetric(truncated12d, truncated75d, 'rest_observed_public_event_days')
+      expect(compTruncated.eligible).toBe(false)
+      expect(compTruncated.reason).toContain('complete')
     })
 
-    it('8. Individual comparison metrics remain visible when overall winner is disabled', () => {
+    it('8. Independent metrics remain comparable when activity telemetry is limited or truncated', () => {
       const truncatedLeft = makeDashboardFixture({
-        user: { ...makeDashboardFixture().user, login: 'alice', name: 'Alice Dev' },
-        score: {
-          score: 88,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 95, collaboration: null, impact: 75 },
-          raw: { ...makeDashboardFixture().score.raw, stars: 120 }
-        },
-        dataQuality: { ...makeDashboardFixture().dataQuality!, isTruncated: true, observedDaysCount: 14 }
+        user: { ...makeDashboardFixture().user, login: 'alice', name: 'Alice Dev', followers: 120 },
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          }),
+          engagement: {
+            ...makeDashboardFixture().intelligence!.engagement,
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          },
+          adoption: {
+            ...makeDashboardFixture().intelligence!.adoption,
+            followersCount: { state: 'observed', value: 120 },
+            totalStargazersCount: { state: 'observed', value: 80 }
+          }
+        }
       })
 
       const truncatedRight = makeDashboardFixture({
-        user: { ...makeDashboardFixture().user, login: 'bob', name: 'Bob Dev' },
-        score: {
-          score: 72,
-          scoringModel: 'two_pillar_renormalized',
-          breakdown: { consistency: 75, collaboration: null, impact: 68 },
-          raw: { ...makeDashboardFixture().score.raw, stars: 85 }
-        },
-        dataQuality: { ...makeDashboardFixture().dataQuality!, isTruncated: true, observedDaysCount: 60 }
+        user: { ...makeDashboardFixture().user, login: 'bob', name: 'Bob Dev', followers: 45 },
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          }),
+          engagement: {
+            ...makeDashboardFixture().intelligence!.engagement,
+            collectionState: 'limit_reached',
+            retrievedEventsCount: 200
+          },
+          adoption: {
+            ...makeDashboardFixture().intelligence!.adoption,
+            followersCount: { state: 'observed', value: 45 },
+            totalStargazersCount: { state: 'observed', value: 110 }
+          }
+        }
       })
 
-      // Overall comparison disabled
-      const verdict = getComparisonVerdict(truncatedLeft, truncatedRight)
-      expect(verdict).toContain('Overall score comparison disabled')
+      // Followers comparison is eligible even though activity is truncated
+      const compFollowers = compareMetric(truncatedLeft, truncatedRight, 'account_followers')
+      expect(compFollowers.eligible).toBe(true)
+      expect(compFollowers.winner).toBe('profile_a')
 
-      // In CompareView, individual columns and metrics remain rendered
-      // Test the CompareColumn component directly for both profiles
-      const htmlLeft = renderToStaticMarkup(
-        React.createElement('div', null,
-          React.createElement('strong', null, truncatedLeft.score.score != null ? truncatedLeft.score.score : '—'),
-          React.createElement('span', { className: 'compareModelBadge' }, 'Truncated 2-Pillar'),
-          React.createElement('b', null, truncatedLeft.user.login)
-        )
-      )
-      expect(htmlLeft).toContain('88')
-      expect(htmlLeft).toContain('Truncated 2-Pillar')
-      expect(htmlLeft).toContain('alice')
-
-      const htmlRight = renderToStaticMarkup(
-        React.createElement('div', null,
-          React.createElement('strong', null, truncatedRight.score.score != null ? truncatedRight.score.score : '—'),
-          React.createElement('span', { className: 'compareModelBadge' }, 'Truncated 2-Pillar'),
-          React.createElement('b', null, truncatedRight.user.login)
-        )
-      )
-      expect(htmlRight).toContain('72')
-      expect(htmlRight).toContain('Truncated 2-Pillar')
-      expect(htmlRight).toContain('bob')
+      // Stars comparison is eligible independently
+      const compStars = compareMetric(truncatedLeft, truncatedRight, 'repo_total_stars')
+      expect(compStars.eligible).toBe(true)
+      expect(compStars.winner).toBe('profile_b')
     })
 
-    // Requirement 9: Unavailable scores never generate a winner
-    it('9. Unavailable scores never generate an overall winner', () => {
+    // Requirement 9: Unavailable scores and metrics never generate a winner
+    it('9. Unavailable scores and metrics never generate a winner', () => {
       const aliceUnavail = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'alice' },
-        score: {
-          score: null,
-          scoringModel: 'unavailable',
-          breakdown: { consistency: null, collaboration: null, impact: 50 },
-          raw: { ...makeDashboardFixture().score.raw, activeDays: null }
-        },
-        dataQuality: { ...makeDashboardFixture().dataQuality!, eventsUnavailable: true }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'unavailable',
+            retrievedEventsCount: 0,
+            observedPublicEventDaysCount: { state: 'unavailable', value: null, note: 'unavailable' }
+          }),
+          engagement: {
+            ...makeDashboardFixture().intelligence!.engagement,
+            collectionState: 'unavailable',
+            retrievedEventsCount: 0
+          }
+        }
       })
 
       const bobComplete = makeDashboardFixture({
         user: { ...makeDashboardFixture().user, login: 'bob' },
-        score: {
-          score: 75,
-          scoringModel: 'three_pillar',
-          breakdown: { consistency: 80, collaboration: 70, impact: 75 },
-          raw: { ...makeDashboardFixture().score.raw }
+        intelligence: {
+          ...makeDashboardFixture().intelligence!,
+          activity: makeRestActivity({
+            collectionState: 'complete',
+            observedPublicEventDaysCount: { state: 'observed', value: 40 }
+          })
         }
       })
 
-      const verdict = getComparisonVerdict(aliceUnavail, bobComplete)
-      expect(verdict).toBe(
-        'Overall comparison unavailable: one or both developers have incomplete contribution telemetry.'
-      )
-      expect(verdict).not.toContain('leads by overall score')
+      const comp = compareMetric(aliceUnavail, bobComplete, 'rest_observed_public_event_days')
+      expect(comp.eligible).toBe(false)
+      expect(comp.winner).toBeNull()
+      expect(comp.reason).toContain('complete')
     })
   })
 })

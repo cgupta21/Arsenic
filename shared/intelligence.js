@@ -160,7 +160,7 @@ export const METRIC_REGISTRY = new Map([
       requiresWindowParity: false,
       requiresCompleteRepoCoverage: false,
       winnerPermitted: true,
-      extractMetric: (p) => (p.intelligence || p).adoption?.followersCount ?? null
+      extractMetric: (p) => (p.intelligence || p).adoption?.currentFollowersCount ?? (p.intelligence || p).adoption?.followersCount ?? null
     }
   ],
 

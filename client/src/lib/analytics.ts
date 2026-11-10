@@ -30,9 +30,19 @@ export function buildInsights(data: Dashboard) {
   if (languages[0]) {
     insights.push(`${languages[0].name} leads by code volume across the analyzed repositories.`)
   }
-  if (score.breakdown.collaboration != null) {
+  const engagement = data.intelligence?.engagement
+  if (engagement && engagement.collectionState === 'complete') {
+    const prs = engagement.pullRequestEventActionsCount.value ?? 0
+    const issues = engagement.issueEventActionsCount.value ?? 0
+    const reviews = engagement.pullRequestReviewEventActionsCount.value ?? 0
+    if (prs + reviews + issues >= 10) {
+      insights.push(`Public engagement is a strong signal, with ${prs} pull request actions, ${issues} issue actions and ${reviews} review actions observed.`)
+    } else {
+      insights.push(`Public engagement is developing, with ${prs} pull request actions and ${issues} issue actions recorded.`)
+    }
+  } else if (score?.breakdown?.collaboration != null) {
     if (score.breakdown.collaboration >= 65) {
-      insights.push(`Collaboration is a strong signal, with ${score.raw.prs ?? 0} pull requests, ${score.raw.issues ?? 0} issues and ${score.raw.reviews ?? 0} reviews in the contribution window.`)
+      insights.push(`Collaboration is a strong signal, with ${score.raw?.prs ?? 0} pull requests, ${score.raw?.issues ?? 0} issues and ${score.raw?.reviews ?? 0} reviews in the contribution window.`)
     } else {
       insights.push(`Collaboration is currently lighter than coding activity, so issues and pull requests are a useful growth area.`)
     }

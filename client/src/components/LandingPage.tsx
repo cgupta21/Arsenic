@@ -158,10 +158,10 @@ export function LandingPage({
               {/* Top Score Strip */}
               <div className="previewScoreStrip">
                 <div className="previewScoreMain">
-                  <div className="previewScoreValue">92</div>
+                  <div className="previewScoreValue">62</div>
                   <div className="previewScoreMeta">
-                    <div className="scoreGrade">Strong health</div>
-                    <div className="scoreSubtext">Consistency 94 • Collaboration 89 • Impact 92</div>
+                    <div className="scoreGrade">Recorded Contribution Days</div>
+                    <div className="scoreSubtext">Activity • Adoption • Maintenance • Community Engagement</div>
                   </div>
                 </div>
                 <div className="previewScoreTags">
@@ -310,11 +310,11 @@ export function LandingPage({
             </div>
             <h3 className="featureCardTitle">Repository metrics</h3>
             <p className="featureCardDesc">
-              Inspect health scores, star counts, primary languages, and maintenance cadence across a
+              Inspect repository status, star counts, primary languages, and maintenance cadence across a
               developer&apos;s public repository portfolio.
             </p>
             <ul className="featureList">
-              <li>Portfolio repository health scores (0-100)</li>
+              <li>Portfolio repository status and issue ratios</li>
               <li>Star and fork counts across public projects</li>
               <li>Stale vs active repository tagging</li>
             </ul>
@@ -446,10 +446,10 @@ export function LandingPage({
             </div>
             <h3 className="stepTitle">Explore developer insights</h3>
             <p className="stepDesc">
-              Inspect velocity scorecards, timing habits, active streaks, automated summaries, or compare multiple developers side-by-side.
+              Inspect activity cadence, timing habits, active streaks, automated summaries, or compare multiple developers side-by-side.
             </p>
             <div className="stepMiniPreview">
-              <span className="tagTerracotta">Health: 92 / 100 • 42d Streak</span>
+              <span className="tagTerracotta">62 Active Days • 42d Streak</span>
             </div>
           </div>
         </div>

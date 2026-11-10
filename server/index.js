@@ -9,7 +9,6 @@ import crypto from 'node:crypto'
 import { Buffer } from 'node:buffer'
 import path from 'node:path'
 import fs from 'node:fs'
-import { calculateScore as calculateScoreModel } from '../shared/score.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 import { isValidGitHubUsername, GITHUB_USERNAME_REGEX } from '../shared/validation.js'
 import {
@@ -222,22 +221,22 @@ function clone(value) {
 function cacheKey(username, tierOrScope = 'public') {
   const normUser = String(username || '').toLowerCase()
   if (tierOrScope === true || tierOrScope === 'private') {
-    return `${normUser}::private`
+    return `v3:${normUser}::private`
   }
   if (tierOrScope === 'verified') {
-    return `${normUser}::verified`
+    return `v3:${normUser}::verified`
   }
   if (tierOrScope === 'estimated') {
-    return `${normUser}::estimated`
+    return `v3:${normUser}::estimated`
   }
-  return `${normUser}::public`
+  return `v3:${normUser}::public`
 }
 
 async function cachedDashboard(key, producer, onStoreKey = null) {
   const existing = cache.get(key)
   if (existing && existing.expires > Date.now()) {
-    // M-03 Cache Versioning: prevent legacy score-shaped cached payloads without intelligence from being returned
-    if (existing.value && !existing.value.intelligence) {
+    // M-03 Cache Versioning: prevent legacy score-shaped cached payloads without intelligence or with legacy score from being returned
+    if (existing.value && (!existing.value.intelligence || existing.value.score !== undefined)) {
       cache.delete(key)
     } else {
       const hit = clone(existing.value)
@@ -771,46 +770,6 @@ function calculateStreaks(days, today) {
   return { current, longest }
 }
 
-function calculateScore({ contributions, repos, followers, timing, observationWindowDays = 365, dataQuality = null }) {
-  const eventsUnavailable = Boolean(dataQuality?.eventsUnavailable)
-  const days = flattenCalendar(contributions?.contributionCalendar)
-  const activeDays = eventsUnavailable ? null : days.filter((day) => day.contributionCount > 0).length
-  const totalContributions = eventsUnavailable ? null : (contributions?.contributionCalendar?.totalContributions ?? 0)
-  const prs = eventsUnavailable ? null : (contributions?.totalPullRequestContributions ?? 0)
-  const issues = eventsUnavailable ? null : (contributions?.totalIssueContributions ?? 0)
-  const reviews = eventsUnavailable ? null : (contributions?.totalPullRequestReviewContributions ?? 0)
-  const stars = repos.reduce((sum, repo) => sum + Number(repo.stargazerCount ?? repo.stargazers_count ?? 0), 0)
-  const forks = repos.reduce((sum, repo) => sum + Number(repo.forkCount ?? repo.forks_count ?? 0), 0)
-  const result = calculateScoreModel({
-    activeDays,
-    prs,
-    issues,
-    reviews,
-    stars,
-    forks,
-    followers,
-    observationWindowDays,
-    dataQuality
-  })
-  const streaks = eventsUnavailable ? { current: 0, longest: 0 } : calculateStreaks(days)
-  return {
-    ...result,
-    raw: {
-      activeDays,
-      totalContributions,
-      prs,
-      issues,
-      reviews,
-      stars,
-      forks,
-      currentStreak: streaks.current,
-      longestStreak: streaks.longest,
-      timingSamples: timing?.commitsSampled || 0,
-      observationWindowDays: result.observationWindowDays,
-      targetActiveDays: result.targetActiveDays
-    }
-  }
-}
 
 function aggregateLanguages(repos) {
   const map = new Map()
@@ -918,15 +877,6 @@ async function buildDashboard(username, authToken, includePrivate = false) {
     const eventsUnavailable = Boolean(dataQuality.eventsUnavailable)
     const activeDays = eventsUnavailable ? null : days.filter((day) => day.contributionCount > 0).length
     const totalContrib = eventsUnavailable ? null : (bundle.contributions?.contributionCalendar?.totalContributions || 0)
-
-    const score = calculateScore({
-      contributions: bundle.contributions,
-      repos,
-      followers: user.followers || 0,
-      timing,
-      observationWindowDays,
-      dataQuality
-    })
 
     const repoHealth = repos.map((repo) => {
       const last = new Date(repo.pushed_at || repo.updated_at).getTime()
@@ -1195,7 +1145,6 @@ async function buildDashboard(username, authToken, includePrivate = false) {
       observationWindowDays,
       languages,
       timing,
-      score,
       intelligence,
       authenticated: Boolean(authToken),
       estimated: isEstimated,
@@ -2105,7 +2054,6 @@ export {
   setSummaryCache,
   contributionsFromEvents,
   buildDashboard,
-  calculateScore,
   validateMetricValue,
   assertTelemetryIntegrity,
   compareMetric,

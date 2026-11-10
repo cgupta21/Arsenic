@@ -211,11 +211,13 @@ describe('Developer Intelligence Overview in Dashboard', () => {
       })
       const html = renderToStaticMarkup(React.createElement(DeveloperIntelligenceOverview, { data }))
 
-      expect(html).toContain('94')
-      expect(html).toContain('Excellent Health')
-      expect(html).toContain('Consistency 96%')
-      expect(html).toContain('Collaboration 92%')
-      expect(html).toContain('Impact 94%')
+      // M-03 Multidimensional Intelligence: hero block displays transparent active days and dimensional measurements
+      expect(html).toContain('62')
+      expect(html).toContain('Active Days Recorded')
+      expect(html).toContain('62 Active Days')
+      expect(html).toContain('Non-Fork Repos')
+      expect(html).toContain('Stars')
+      expect(html).toContain('Followers')
     })
 
     it('renders Commits & PRs with accurate formatting and trend', () => {

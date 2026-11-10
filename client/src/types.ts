@@ -103,7 +103,8 @@ export type Dashboard = {
   languages: { name: string; size: number; pct: number; color: string | null }[]
   timing: { commitsSampled: number; hours: number[]; weekdays: number[]; timezone?: string }
   intelligence?: DeveloperIntelligence
-  score: {
+  /** @deprecated Retired in M-03 in favor of multidimensional intelligence */
+  score?: {
     score: number | null
     scoringModel?: 'three_pillar' | 'two_pillar_renormalized' | 'unavailable'
     breakdown: {

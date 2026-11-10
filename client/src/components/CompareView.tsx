@@ -1,65 +1,15 @@
 import { useState } from 'react'
-import { ArrowLeftRight, CheckCircle2, Info, Medal, Search, ShieldAlert, Users } from 'lucide-react'
+import { ArrowLeftRight, CheckCircle2, FolderGit2, Info, Search, ShieldAlert, Users } from 'lucide-react'
 import type { CompareResponse, Dashboard } from '../types'
 import { compareDashboards } from '../hooks/useDashboard'
 import { compactNumber } from '../lib/analytics'
 import { compareMetric } from '../../../shared/intelligence.js'
 
-export type ScoringModelType = 'three_pillar' | 'two_pillar_renormalized' | 'unavailable'
-
-export function resolveScoringModel(dashboard: Dashboard): ScoringModelType {
-  if (dashboard.score.score == null || dashboard.score.breakdown.consistency == null) {
-    return 'unavailable'
-  }
-  if (dashboard.score.scoringModel) {
-    return dashboard.score.scoringModel
-  }
-  if (dashboard.dataQuality?.eventsUnavailable) {
-    return 'unavailable'
-  }
-  if (dashboard.score.breakdown.collaboration == null || dashboard.dataQuality?.isTruncated) {
-    return 'two_pillar_renormalized'
-  }
-  return 'three_pillar'
-}
-
-function getModelLabel(model: ScoringModelType): string {
-  switch (model) {
-    case 'three_pillar': return 'Complete 3-Pillar'
-    case 'two_pillar_renormalized': return 'Truncated 2-Pillar'
-    case 'unavailable': return 'Telemetry Incomplete'
-  }
-}
-
-export function getComparisonVerdict(left: Dashboard, right: Dashboard): string {
-  const modelLeft = resolveScoringModel(left)
-  const modelRight = resolveScoringModel(right)
-
-  if (modelLeft === 'unavailable' || modelRight === 'unavailable' || left.score.score == null || right.score.score == null) {
-    return 'Overall comparison unavailable: one or both developers have incomplete contribution telemetry.'
-  }
-
-  if (modelLeft !== modelRight) {
-    return `Overall score comparison disabled: incompatible scoring models (${getModelLabel(modelLeft)} vs. ${getModelLabel(modelRight)}). Individual metrics remain visible above.`
-  }
-
-  if (modelLeft === 'two_pillar_renormalized') {
-    return 'Overall score comparison disabled: both profiles have truncated contribution telemetry and should not be used to determine an overall winner. Individual metrics remain visible above.'
-  }
-
-  const scoreLeft = left.score.score
-  const scoreRight = right.score.score
-
-  if (scoreLeft === scoreRight) {
-    return 'Tie on Arsenic score'
-  }
-
-  const leader = scoreLeft > scoreRight ? left.user.login : right.user.login
-  return `${leader} leads by overall score`
-}
-
 function CompareColumn({ title, data }: { title: string; data: Dashboard }) {
-  const model = resolveScoringModel(data)
+  const intel = data.intelligence
+  const nonForkRepos = intel?.maintenance?.repositoryCoverage?.observedNonForkRepos ?? data.repos.filter((r) => !r.fork).length
+  const totalStars = intel?.adoption?.totalStargazersCount?.value ?? data.repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+
   return (
     <div className="compareColumn">
       <div className="compareIdentity">
@@ -67,18 +17,13 @@ function CompareColumn({ title, data }: { title: string; data: Dashboard }) {
         <div>
           <b>{data.user.name || data.user.login}</b>
           <span>@{data.user.login}</span>
-          <span className="compareModelBadge">{getModelLabel(model)}</span>
         </div>
-        <strong>{data.score.score != null ? data.score.score : '—'}</strong>
       </div>
       <div className="compareStats">
         <div><span>Contributions</span><b>{data.contributions.total != null ? compactNumber(data.contributions.total) : '—'}</b></div>
-        <div><span>Repos</span><b>{data.repos.length}</b></div>
-        <div><span>Stars</span><b>{compactNumber(data.score.raw.stars)}</b></div>
+        <div><span>Non-Fork Repos</span><b>{nonForkRepos}</b></div>
+        <div><span>Stars</span><b>{compactNumber(totalStars)}</b></div>
         <div><span>Followers</span><b>{compactNumber(data.user.followers)}</b></div>
-      </div>
-      <div className="compareBars">
-        {(['consistency', 'collaboration', 'impact'] as const).map((key) => <div key={key}><span>{key}</span><i><em style={{ width: `${data.score.breakdown[key] ?? 0}%` }} /></i><b>{data.score.breakdown[key] != null ? data.score.breakdown[key] : '—'}</b></div>)}
       </div>
       <h4>{title}</h4>
     </div>
@@ -102,7 +47,12 @@ export function CompareView({ initialLeft, initialRight }: { initialLeft: string
 
   return (
     <section className="comparePage">
-      <div className="sectionHead compact"><div><h2>Compare developers</h2><p>Side-by-side signals for consistency, collaboration and impact.</p></div></div>
+      <div className="sectionHead compact">
+        <div>
+          <h2>Compare developers</h2>
+          <p>Metric-specific side-by-side comparison across multidimensional intelligence.</p>
+        </div>
+      </div>
       <form className="compareForm" onSubmit={run}>
         <div><label htmlFor="compare-left">Developer A</label><div className="inputWrap"><Users size={16} /><input id="compare-left" value={left} onChange={(e) => setLeft(e.target.value)} /></div></div>
         <ArrowLeftRight className="compareArrow" aria-hidden="true" />
@@ -114,10 +64,7 @@ export function CompareView({ initialLeft, initialRight }: { initialLeft: string
         <div className="compareGrid">
           <CompareColumn title="Developer A" data={result.left} />
           <CompareColumn title="Developer B" data={result.right} />
-          <div className="winner">
-            <Medal size={18} />
-            {getComparisonVerdict(result.left, result.right)}
-          </div>
+
           {result.left.intelligence && result.right.intelligence && (
             <div className="dimensionalComparisonSection" style={{ gridColumn: '1 / -1', marginTop: '20px' }}>
               <h3 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.1rem' }}>
@@ -163,6 +110,29 @@ export function CompareView({ initialLeft, initialRight }: { initialLeft: string
                     return null
                   }
                 })}
+              </div>
+
+              {/* Maintenance Dimension: Factual side-by-side counts only (no winner declaration) */}
+              <div style={{ marginTop: '20px' }}>
+                <h4 style={{ marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.98rem', color: 'var(--muted)' }}>
+                  <FolderGit2 size={16} /> Repository Maintenance (Factual Side-by-Side Breakdown)
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+                  {[
+                    { label: 'Non-Fork Repos', a: result.left.intelligence.maintenance.repositoryCoverage.observedNonForkRepos, b: result.right.intelligence.maintenance.repositoryCoverage.observedNonForkRepos },
+                    { label: 'Active Repos', a: result.left.intelligence.maintenance.activeCount.value, b: result.right.intelligence.maintenance.activeCount.value },
+                    { label: 'Inactive Repos', a: result.left.intelligence.maintenance.inactiveCount.value, b: result.right.intelligence.maintenance.inactiveCount.value },
+                    { label: 'Archived Repos', a: result.left.intelligence.maintenance.archivedCount.value, b: result.right.intelligence.maintenance.archivedCount.value },
+                  ].map((item) => (
+                    <div key={item.label} className="previewMetricItem" style={{ padding: '10px', borderRadius: '6px', background: 'var(--card-subtle, rgba(255,255,255,0.02))' }}>
+                      <span className="metricLabel" style={{ fontSize: '0.78rem' }}>{item.label}</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '0.88rem' }}>
+                        <span>{result.left.user.login}: <b>{item.a ?? '—'}</b></span>
+                        <span>{result.right.user.login}: <b>{item.b ?? '—'}</b></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}

@@ -338,6 +338,9 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+.previewScoreTags:empty {
+  display: none;
+}
 .previewTag {
   display: inline-flex;
   align-items: center;

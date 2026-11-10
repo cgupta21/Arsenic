@@ -48,6 +48,35 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
 
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
 
+  // Determine whether genuine positive contribution activity has been demonstrated
+  const hasDemonstratedActivity = useMemo(() => {
+    if (eventsUnavailable) return false
+    const total = data.contributions?.total ?? score.raw?.totalContributions
+    const activeDays = data.contributions?.activeDays ?? score.raw?.activeDays
+    const prs = score.raw?.prs
+    const issues = score.raw?.issues
+    const reviews = score.raw?.reviews
+    const hasDayActivity = days.some((d) => (d.contributionCount || 0) > 0)
+    return (
+      (total != null && total > 0) ||
+      (activeDays != null && activeDays > 0) ||
+      (prs != null && prs > 0) ||
+      (issues != null && issues > 0) ||
+      (reviews != null && reviews > 0) ||
+      hasDayActivity
+    )
+  }, [
+    eventsUnavailable,
+    data.contributions?.total,
+    data.contributions?.activeDays,
+    score.raw?.totalContributions,
+    score.raw?.activeDays,
+    score.raw?.prs,
+    score.raw?.issues,
+    score.raw?.reviews,
+    days,
+  ])
+
   // Trend calculation comparing the last 28 days vs prior 28 days (4-week periods)
   const commitTrend = useMemo(() => {
     if (eventsUnavailable || data.contributions.total == null) {
@@ -202,23 +231,22 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                 <span className="previewTag tagSage">
                   <CheckCircle2 size={12} aria-hidden="true" /> Active Collab
                 </span>
-              ) : (
-                <span className="previewTag tagSand">
-                  <CheckCircle2 size={12} aria-hidden="true" /> Solo Cadence
+              ) : !data.dataQuality?.isTruncated && score.breakdown.collaboration != null && score.breakdown.collaboration < 35 && hasDemonstratedActivity ? (
+                <span
+                  className="previewTag tagSand"
+                  title="Limited collaboration signals in observed public activity"
+                >
+                  <CheckCircle2 size={12} aria-hidden="true" /> Low Collaboration
                 </span>
-              )}
+              ) : null}
 
               {eventsUnavailable ? (
                 hasActiveRepos ? (
                   <span className="previewTag tagSand">
                     <GitBranch size={12} aria-hidden="true" /> Active Maintenance
                   </span>
-                ) : (
-                  <span className="previewTag tagSand">
-                    <GitBranch size={12} aria-hidden="true" /> Clean Branching
-                  </span>
-                )
-              ) : data.contributions.currentStreak >= 7 || (score.breakdown.consistency != null && score.breakdown.consistency >= 75) ? (
+                ) : null
+              ) : (data.contributions?.currentStreak ?? 0) >= 7 || (score.breakdown.consistency != null && score.breakdown.consistency >= 75) ? (
                 <span className="previewTag tagSand">
                   <GitBranch size={12} aria-hidden="true" /> Steady Cadence
                 </span>
@@ -226,11 +254,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                 <span className="previewTag tagSand">
                   <GitBranch size={12} aria-hidden="true" /> Active Maintenance
                 </span>
-              ) : (
-                <span className="previewTag tagSand">
-                  <GitBranch size={12} aria-hidden="true" /> Clean Branching
-                </span>
-              )}
+              ) : null}
 
               {data.estimated ? (
                 <span className="previewTag tagTerracotta">

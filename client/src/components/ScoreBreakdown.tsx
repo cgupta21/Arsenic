@@ -20,12 +20,48 @@ export function ScoreBreakdown({ dashboard, score }: ScoreBreakdownProps) {
     const eng = intel.engagement
 
     const reachMetric = reach?.followersCount
-    const isReachAvailable = reachMetric != null && reachMetric.state !== 'unavailable' && reachMetric.state !== 'unknown' && reachMetric.value != null
-    const reachValue = isReachAvailable ? compactNumber(reachMetric.value) : '—'
-    const reachBadge = isReachAvailable ? `${reachValue} Followers` : 'Reach Unavailable'
-    const reachNote = isReachAvailable
-      ? 'Point-in-time public developer account reach'
-      : (reachMetric?.note || 'Account reach telemetry unavailable')
+    let reachValue = '—'
+    let reachBadge = 'Reach Unavailable'
+    let reachNote = reachMetric?.note || 'Account reach telemetry unavailable'
+
+    if (reachMetric) {
+      switch (reachMetric.state) {
+        case 'observed': {
+          const formatted = typeof reachMetric.value === 'number' ? compactNumber(reachMetric.value) : '—'
+          reachValue = formatted
+          reachBadge = `${formatted} Followers`
+          reachNote = reachMetric.note || 'Point-in-time public developer account reach'
+          break
+        }
+        case 'zero': {
+          reachValue = '0'
+          reachBadge = '0 Followers'
+          reachNote = reachMetric.note || 'Confirmed zero public followers recorded'
+          break
+        }
+        case 'partial': {
+          const lowerBound = typeof reachMetric.value === 'number' ? compactNumber(reachMetric.value) : '0'
+          reachValue = `≥${lowerBound}`
+          reachBadge = `≥${lowerBound} Followers (Incomplete)`
+          reachNote = reachMetric.note || 'Incomplete telemetry: observed lower bound only'
+          break
+        }
+        case 'ambiguous_zero': {
+          reachValue = '—'
+          reachBadge = 'Ambiguous Reach'
+          reachNote = reachMetric.note || 'Unconfirmed zero: telemetry incomplete or unverified'
+          break
+        }
+        case 'unknown':
+        case 'unavailable':
+        default: {
+          reachValue = '—'
+          reachBadge = 'Reach Unavailable'
+          reachNote = reachMetric.note || 'Account reach telemetry unavailable'
+          break
+        }
+      }
+    }
 
     const dimensions = [
       {

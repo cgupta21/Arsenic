@@ -459,25 +459,118 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
       expect(res.winner).toBeNull()
     })
 
-    it('ScoreBreakdown renders all five dimensions independently and displays unavailable state when reach is absent or unavailable', () => {
-      const standardHtml = renderToStaticMarkup(
-        React.createElement(ScoreBreakdown, { dashboard: makeTestDashboard() })
+    it('ScoreBreakdown handles every MetricValue state explicitly with lower-bound and ambiguity protections', () => {
+      // 1. observed: definitive count
+      const observedHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'observed', value: 150 }
+              }
+            }
+          })
+        })
       )
-      expect(standardHtml).toContain('Contribution Activity')
-      expect(standardHtml).toContain('Repository Adoption')
-      expect(standardHtml).toContain('Account Reach')
-      expect(standardHtml).toContain('Repository Maintenance')
-      expect(standardHtml).toContain('Community Engagement')
-      expect(standardHtml).toContain('150 Followers')
+      expect(observedHtml).toContain('150 Followers')
+      expect(observedHtml).toContain('150')
 
-      // Absent reach does not recover from adoption and renders unavailable
+      // 2. zero: confirmed exact zero
+      const zeroHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'zero', value: 0 }
+              }
+            }
+          })
+        })
+      )
+      expect(zeroHtml).toContain('0 Followers')
+      expect(zeroHtml).toContain('Confirmed zero public followers')
+
+      // 3. partial: displays lower-bound notation (≥200), incomplete indicator, never definitive
+      const partialHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'partial', value: 200, isLowerBound: true, note: 'Sampled pagination limit' }
+              }
+            }
+          })
+        })
+      )
+      expect(partialHtml).toContain('≥200 Followers (Incomplete)')
+      expect(partialHtml).toContain('≥200')
+      expect(partialHtml).toContain('Sampled pagination limit')
+      expect(partialHtml).not.toContain('>200 Followers<')
+      expect(partialHtml).not.toContain('>200<')
+
+      // 4. ambiguous_zero: unconfirmed state, NOT '0 Followers'
+      const ambiguousHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'ambiguous_zero', value: 0, note: 'Unconfirmed unindexed count' }
+              }
+            }
+          })
+        })
+      )
+      expect(ambiguousHtml).toContain('Ambiguous Reach')
+      expect(ambiguousHtml).not.toContain('0 Followers')
+
+      // 5. unknown: Reach Unavailable
+      const unknownHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'unknown', value: null, note: 'Unknown upstream response' }
+              }
+            }
+          })
+        })
+      )
+      expect(unknownHtml).toContain('Reach Unavailable')
+
+      // 6. unavailable: Reach Unavailable
+      const unavailHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, {
+          dashboard: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'unavailable', value: null, note: 'Rate limit on followers' }
+              }
+            }
+          })
+        })
+      )
+      expect(unavailHtml).toContain('Reach Unavailable')
+      expect(unavailHtml).toContain('Rate limit on followers')
+
+      // 7. missing reach: Reach Unavailable, never recovers from adoption
       const absentReachDashboard = makeTestDashboard({
         intelligence: {
           ...makeMockIntelligence(),
           reach: undefined as unknown as DeveloperIntelligence['reach'],
           adoption: {
             ...makeMockIntelligence().adoption,
-            // Even if an obsolete payload had followersCount in adoption:
             ...({ followersCount: { state: 'observed', value: 999 } } as Record<string, unknown>)
           }
         }
@@ -487,22 +580,6 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
       )
       expect(absentHtml).toContain('Reach Unavailable')
       expect(absentHtml).not.toContain('999 Followers')
-
-      // Unavailable reach renders note and unavailable badge
-      const unavailReachDashboard = makeTestDashboard({
-        intelligence: {
-          ...makeMockIntelligence(),
-          reach: {
-            snapshotType: 'current_point_in_time',
-            followersCount: { state: 'unavailable', value: null, note: 'Rate limit on followers' }
-          }
-        }
-      })
-      const unavailHtml = renderToStaticMarkup(
-        React.createElement(ScoreBreakdown, { dashboard: unavailReachDashboard })
-      )
-      expect(unavailHtml).toContain('Reach Unavailable')
-      expect(unavailHtml).toContain('Rate limit on followers')
     })
 
     it('High Reach requires genuinely observed Account Reach >= 100 and does not trigger on stars, partial, ambiguous, or estimated reach', () => {
@@ -595,6 +672,24 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
       )
       expect(estimatedProfileHtml).toContain('Public Estimate')
       expect(estimatedProfileHtml).not.toContain('High Reach')
+
+      // 6. Non-finite values: NaN, positive Infinity, negative Infinity cannot trigger High Reach
+      for (const nonFiniteVal of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+        const nonFiniteHtml = renderToStaticMarkup(
+          React.createElement(DeveloperIntelligenceOverview, {
+            data: makeTestDashboard({
+              intelligence: {
+                ...makeMockIntelligence(),
+                reach: {
+                  snapshotType: 'current_point_in_time',
+                  followersCount: { state: 'observed', value: nonFiniteVal }
+                }
+              }
+            })
+          })
+        )
+        expect(nonFiniteHtml).not.toContain('High Reach')
+      }
     })
 
     it('Low Collaboration is never awarded when engagement is missing or truncated', () => {

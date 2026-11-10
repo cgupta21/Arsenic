@@ -238,7 +238,10 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
             )
 
             const reachMetric = intelligence?.reach?.followersCount
-            const isReachObserved = !data.estimated && reachMetric?.state === 'observed' && typeof reachMetric.value === 'number'
+            const isReachObserved = !data.estimated &&
+              reachMetric?.state === 'observed' &&
+              typeof reachMetric.value === 'number' &&
+              Number.isFinite(reachMetric.value)
             const isHighReach = isReachObserved && reachMetric.value >= 100
             const reachFollowers = reachMetric?.value ?? user.followers
 

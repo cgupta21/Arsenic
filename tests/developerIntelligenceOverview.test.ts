@@ -64,6 +64,11 @@ function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
   const prs = overrides.score?.raw?.prs ?? 38
   const reviews = overrides.score?.raw?.reviews ?? 20
   const issues = overrides.score?.raw?.issues ?? 14
+  const defaultFollowers = overrides.user?.followers ?? (
+    overrides.score?.raw != null
+      ? ((overrides.score.raw as Record<string, unknown>).followers as number | undefined ?? ((overrides.score.raw.stars as number | undefined ?? 0) >= 100 ? 150 : 0))
+      : 142
+  )
 
   const collectionState = eventsUnavailable ? 'unavailable' : isTruncated ? 'limit_reached' : 'complete'
 
@@ -97,7 +102,7 @@ function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
     },
     reach: {
       snapshotType: 'current_point_in_time',
-      followersCount: metricNum(overrides.user?.followers ?? 142)
+      followersCount: metricNum(defaultFollowers)
     },
     maintenance: {
       repositoryCoverage: {
@@ -149,7 +154,7 @@ function makeMockDashboard(overrides: Partial<Dashboard> = {}): Dashboard {
       bio: 'Building developer intelligence tools and distributed systems.',
       html_url: 'https://github.com/cgupta21',
       public_repos: 24,
-      followers: 142,
+      followers: defaultFollowers,
       following: 38,
       created_at: '2020-03-15T00:00:00Z',
       location: 'San Francisco, CA',

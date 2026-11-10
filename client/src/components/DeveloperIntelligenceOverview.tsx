@@ -237,7 +237,10 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
               (prCollabActions + reviewCollabActions) <= 1
             )
 
-            const reachFollowers = intelligence?.reach?.followersCount?.value ?? user.followers
+            const reachMetric = intelligence?.reach?.followersCount
+            const isReachObserved = !data.estimated && reachMetric?.state === 'observed' && typeof reachMetric.value === 'number'
+            const isHighReach = isReachObserved && reachMetric.value >= 100
+            const reachFollowers = reachMetric?.value ?? user.followers
 
             return (
               <div className="previewScoreStrip">
@@ -294,7 +297,7 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
                     <span className="previewTag tagTerracotta">
                       <Sparkles size={12} aria-hidden="true" /> Public Estimate
                     </span>
-                  ) : totalStars >= 100 ? (
+                  ) : isHighReach ? (
                     <span className="previewTag tagTerracotta">
                       <Sparkles size={12} aria-hidden="true" /> High Reach
                     </span>

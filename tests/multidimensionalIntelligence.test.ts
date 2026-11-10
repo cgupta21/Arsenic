@@ -440,15 +440,161 @@ describe('M-03 Multidimensional Intelligence & Metric Value Validation', () => {
       expect(res.winner).toBe('profile_a')
     })
 
-    it('ScoreBreakdown renders all five dimensions independently', () => {
-      const html = renderToStaticMarkup(
+    it('account_followers reads exclusively from reach.followersCount and does not recover from adoption', () => {
+      // Profile A has reach: undefined, but adoption has followersCount: 999
+      const profileWithoutReach = {
+        ...makeMockIntelligence(),
+        reach: undefined as unknown as DeveloperIntelligence['reach'],
+        adoption: {
+          ...makeMockIntelligence().adoption,
+          followersCount: { state: 'observed', value: 999 }
+        }
+      }
+      const profileNormal = makeMockIntelligence({
+        reach: { snapshotType: 'current_point_in_time', followersCount: { state: 'observed', value: 100 } }
+      })
+      const res = compareMetric(profileWithoutReach, profileNormal, 'account_followers')
+      expect(res.eligible).toBe(false)
+      expect(res.reason).toMatch(/profileA=null/i)
+      expect(res.winner).toBeNull()
+    })
+
+    it('ScoreBreakdown renders all five dimensions independently and displays unavailable state when reach is absent or unavailable', () => {
+      const standardHtml = renderToStaticMarkup(
         React.createElement(ScoreBreakdown, { dashboard: makeTestDashboard() })
       )
-      expect(html).toContain('Contribution Activity')
-      expect(html).toContain('Repository Adoption')
-      expect(html).toContain('Account Reach')
-      expect(html).toContain('Repository Maintenance')
-      expect(html).toContain('Community Engagement')
+      expect(standardHtml).toContain('Contribution Activity')
+      expect(standardHtml).toContain('Repository Adoption')
+      expect(standardHtml).toContain('Account Reach')
+      expect(standardHtml).toContain('Repository Maintenance')
+      expect(standardHtml).toContain('Community Engagement')
+      expect(standardHtml).toContain('150 Followers')
+
+      // Absent reach does not recover from adoption and renders unavailable
+      const absentReachDashboard = makeTestDashboard({
+        intelligence: {
+          ...makeMockIntelligence(),
+          reach: undefined as unknown as DeveloperIntelligence['reach'],
+          adoption: {
+            ...makeMockIntelligence().adoption,
+            // Even if an obsolete payload had followersCount in adoption:
+            ...({ followersCount: { state: 'observed', value: 999 } } as Record<string, unknown>)
+          }
+        }
+      })
+      const absentHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, { dashboard: absentReachDashboard })
+      )
+      expect(absentHtml).toContain('Reach Unavailable')
+      expect(absentHtml).not.toContain('999 Followers')
+
+      // Unavailable reach renders note and unavailable badge
+      const unavailReachDashboard = makeTestDashboard({
+        intelligence: {
+          ...makeMockIntelligence(),
+          reach: {
+            snapshotType: 'current_point_in_time',
+            followersCount: { state: 'unavailable', value: null, note: 'Rate limit on followers' }
+          }
+        }
+      })
+      const unavailHtml = renderToStaticMarkup(
+        React.createElement(ScoreBreakdown, { dashboard: unavailReachDashboard })
+      )
+      expect(unavailHtml).toContain('Reach Unavailable')
+      expect(unavailHtml).toContain('Rate limit on followers')
+    })
+
+    it('High Reach requires genuinely observed Account Reach >= 100 and does not trigger on stars, partial, ambiguous, or estimated reach', () => {
+      // 1. High stars (500) but low followers (20) -> High Reach MUST NOT appear
+      const highStarsLowFollowersHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              adoption: {
+                ...makeMockIntelligence().adoption,
+                totalStargazersCount: { state: 'observed', value: 500 }
+              },
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'observed', value: 20 }
+              }
+            }
+          })
+        })
+      )
+      expect(highStarsLowFollowersHtml).not.toContain('High Reach')
+
+      // 2. Low stars (5) but genuinely observed high followers (150) -> High Reach MUST appear
+      const lowStarsHighFollowersHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              adoption: {
+                ...makeMockIntelligence().adoption,
+                totalStargazersCount: { state: 'observed', value: 5 }
+              },
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'observed', value: 150 }
+              }
+            }
+          })
+        })
+      )
+      expect(lowStarsHighFollowersHtml).toContain('High Reach')
+
+      // 3. Partial reach (even with numeric value 200) -> High Reach MUST NOT appear
+      const partialReachHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'partial', value: 200, isLowerBound: true, note: 'Sampled' }
+              }
+            }
+          })
+        })
+      )
+      expect(partialReachHtml).not.toContain('High Reach')
+
+      // 4. Ambiguous zero or unavailable reach -> High Reach MUST NOT appear
+      const ambiguousReachHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'ambiguous_zero', value: 0, note: 'Ambiguous' }
+              }
+            }
+          })
+        })
+      )
+      expect(ambiguousReachHtml).not.toContain('High Reach')
+
+      // 5. Estimated profile with 200 followers -> shows Public Estimate, NOT High Reach
+      const estimatedProfileHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: makeTestDashboard({
+            estimated: true,
+            intelligence: {
+              ...makeMockIntelligence(),
+              reach: {
+                snapshotType: 'current_point_in_time',
+                followersCount: { state: 'observed', value: 200 }
+              }
+            }
+          })
+        })
+      )
+      expect(estimatedProfileHtml).toContain('Public Estimate')
+      expect(estimatedProfileHtml).not.toContain('High Reach')
     })
 
     it('Low Collaboration is never awarded when engagement is missing or truncated', () => {

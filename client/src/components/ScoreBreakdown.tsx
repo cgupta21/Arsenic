@@ -19,7 +19,13 @@ export function ScoreBreakdown({ dashboard, score }: ScoreBreakdownProps) {
     const maint = intel.maintenance
     const eng = intel.engagement
 
-    const reachFollowers = reach?.followersCount?.value ?? (adopt as unknown as { followersCount?: { value?: number } })?.followersCount?.value ?? 0
+    const reachMetric = reach?.followersCount
+    const isReachAvailable = reachMetric != null && reachMetric.state !== 'unavailable' && reachMetric.state !== 'unknown' && reachMetric.value != null
+    const reachValue = isReachAvailable ? compactNumber(reachMetric.value) : '—'
+    const reachBadge = isReachAvailable ? `${reachValue} Followers` : 'Reach Unavailable'
+    const reachNote = isReachAvailable
+      ? 'Point-in-time public developer account reach'
+      : (reachMetric?.note || 'Account reach telemetry unavailable')
 
     const dimensions = [
       {
@@ -69,11 +75,11 @@ export function ScoreBreakdown({ dashboard, score }: ScoreBreakdownProps) {
       {
         title: 'Account Reach',
         icon: Users,
-        badge: `${compactNumber(reachFollowers)} Followers`,
+        badge: reachBadge,
         stats: [
-          { label: 'Followers', value: compactNumber(reachFollowers) }
+          { label: 'Followers', value: reachValue }
         ],
-        note: 'Point-in-time public developer account reach'
+        note: reachNote
       },
       {
         title: 'Repository Maintenance',

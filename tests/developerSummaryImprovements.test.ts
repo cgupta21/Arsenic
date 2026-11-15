@@ -374,6 +374,22 @@ describe('Intelligent Developer Summary — Accuracy, Quality & UI', () => {
       const metrics = extractSummaryMetrics(lowSampleData)
       expect(metrics.timing).toBeNull()
     })
+
+    it('extracts peak timing metrics from hours and weekdays arrays when peakHour and peakWeekday properties are omitted', () => {
+      const data = makeMockDashboard({
+        timing: {
+          commitsSampled: 128,
+          hours: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 0, 0, 0, 0, 0, 0, 0], // peak hour 16
+          weekdays: [10, 10, 50, 10, 10, 10, 10], // peak Tuesday (index 2)
+          timezone: 'UTC',
+        },
+      })
+      const metrics = extractSummaryMetrics(data)
+      expect(metrics.timing).not.toBeNull()
+      expect(metrics.timing?.hour).toBe(16)
+      expect(metrics.timing?.weekday).toBe('Tuesday')
+      expect(metrics.timing?.sampled).toBe(128)
+    })
   })
 
   describe('4. DeveloperSummaryCard UI component states', () => {

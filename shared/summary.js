@@ -573,10 +573,20 @@ export function extractSummaryMetrics(data = {}) {
     : null
 
   const sampled = timing?.commitsSampled || 0
-  const timingMetric = (sampled >= 10 && timing?.peakWeekday != null && timing?.peakHour != null)
+  let peakHour = timing?.peakHour ?? null
+  let peakWeekday = timing?.peakWeekday ?? null
+
+  if (sampled >= 10 && (peakHour == null || peakWeekday == null) && Array.isArray(timing?.hours) && Array.isArray(timing?.weekdays)) {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+    peakHour = timing.hours.reduce((b, c, i, a) => (c > a[b] ? i : b), 0)
+    const dayIdx = timing.weekdays.reduce((b, c, i, a) => (c > a[b] ? i : b), 0)
+    peakWeekday = days[dayIdx]
+  }
+
+  const timingMetric = (sampled >= 10 && peakWeekday != null && peakHour != null)
     ? {
-      hour: timing.peakHour,
-      weekday: timing.peakWeekday,
+      hour: peakHour,
+      weekday: peakWeekday,
       sampled
     }
     : null

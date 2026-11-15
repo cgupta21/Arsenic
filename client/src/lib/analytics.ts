@@ -73,9 +73,11 @@ export function topTiming(data: Dashboard) {
   return { hour: hourIndex, weekday: days[dayIndex] || '—' }
 }
 
-export function relativeDays(value: string | null) {
+export function relativeDays(value: string | null | undefined) {
   if (!value) return 0
-  return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000))
+  const time = new Date(value).getTime()
+  if (isNaN(time)) return 0
+  return Math.max(0, Math.floor((Date.now() - time) / 86400000))
 }
 
 export const compactNumber = (value: number | null | undefined) => {

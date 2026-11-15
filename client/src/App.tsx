@@ -831,12 +831,14 @@ function DashboardView({
   const [summary, setSummary] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryError, setSummaryError] = useState<string | null>(null)
+  const summaryLoadingRef = useRef(false)
   const shareRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setSummary('')
     setSummaryLoading(false)
     setSummaryError(null)
+    summaryLoadingRef.current = false
   }, [username])
 
   const repos = useMemo(() => {
@@ -862,15 +864,18 @@ function DashboardView({
   }, [data])
 
   const aiSummary = async () => {
-    if (!data || summaryLoading) return
+    if (!data?.user?.login || summaryLoadingRef.current) return
+    summaryLoadingRef.current = true
     setSummaryLoading(true)
     setSummaryError(null)
     try {
       const res = await generateSummary(data.user.login)
       setSummary(res.summary)
+      setSummaryError(null)
     } catch (caught) {
       setSummaryError(caught instanceof Error ? caught.message : 'Developer summary unavailable.')
     } finally {
+      summaryLoadingRef.current = false
       setSummaryLoading(false)
     }
   }

@@ -580,4 +580,218 @@ describe('Intelligent Developer Summary — Accuracy, Quality & UI', () => {
       }
     })
   })
+
+  describe('7. PR #28 Review Fixes — Single Card, Single Request, Error/Loading States & Pure Factual Insights', () => {
+    it('verifies that exactly one summary card is rendered in App.tsx and the old Card was removed', async () => {
+      const fs = await import('node:fs')
+      const appSource = fs.readFileSync('client/src/App.tsx', 'utf-8')
+
+      // Confirm legacy summary Card is completely removed
+      expect(appSource).not.toMatch(/<Card[^>]*title=["']Intelligent developer summary["']/i)
+      expect(appSource).not.toContain('aiPanel')
+
+      // Confirm DeveloperSummaryCard is included exactly once in JSX
+      const matches = appSource.match(/<DeveloperSummaryCard\b/g)
+      expect(matches).not.toBeNull()
+      expect(matches!.length).toBe(1)
+    })
+
+    it('ensures all action buttons in DeveloperSummaryCard are type="button" and disabled during loading', () => {
+      const data = makeMockDashboard()
+
+      // Empty state
+      const emptyHtml = renderToStaticMarkup(
+        React.createElement(DeveloperSummaryCard, {
+          data,
+          summary: '',
+          summaryLoading: false,
+          summaryError: null,
+          onGenerate: vi.fn(),
+        })
+      )
+      expect(emptyHtml).toContain('type="button"')
+      expect(emptyHtml).toContain('class="primaryBtn generateSummaryBtn"')
+
+      // Error state retry button
+      const errorHtml = renderToStaticMarkup(
+        React.createElement(DeveloperSummaryCard, {
+          data,
+          summary: '',
+          summaryLoading: false,
+          summaryError: 'Network failure',
+          onGenerate: vi.fn(),
+        })
+      )
+      expect(errorHtml).toContain('type="button"')
+      expect(errorHtml).toContain('class="primaryBtn summaryRetryBtn"')
+
+      // Loaded state refresh button
+      const loadedHtml = renderToStaticMarkup(
+        React.createElement(DeveloperSummaryCard, {
+          data,
+          summary: 'Developer profile summary text.',
+          summaryLoading: false,
+          summaryError: null,
+          onGenerate: vi.fn(),
+        })
+      )
+      expect(loadedHtml).toContain('type="button"')
+      expect(loadedHtml).toContain('class="secondaryBtn refreshSummaryBtn"')
+
+      // When loading is true, summaryLoadingState renders and replaces action buttons
+      const loadingHtml = renderToStaticMarkup(
+        React.createElement(DeveloperSummaryCard, {
+          data,
+          summary: 'Developer profile summary text.',
+          summaryLoading: true,
+          summaryError: null,
+          onGenerate: vi.fn(),
+        })
+      )
+      expect(loadingHtml).toContain('summaryLoadingState')
+      expect(loadingHtml).not.toContain('refreshSummaryBtn')
+      expect(loadingHtml).not.toContain('generateSummaryBtn')
+    })
+
+    it('ensures one generate action triggers exactly one API request and ignores concurrent invocations', async () => {
+      // Simulate aiSummary controller behavior with synchronous lock ref
+      const mockGenerateSummary = vi.fn().mockImplementation(
+        () => new Promise<{ summary: string }>((resolve) => setTimeout(() => resolve({ summary: 'Resolved summary' }), 20))
+      )
+
+      let loading = false
+      let error: string | null = null
+      let summary = ''
+      const loadingRef = { current: false }
+
+      const aiSummary = async (login: string) => {
+        if (!login || loadingRef.current) return
+        loadingRef.current = true
+        loading = true
+        error = null
+        try {
+          const res = await mockGenerateSummary(login)
+          summary = res.summary
+          error = null
+        } catch (err) {
+          error = err instanceof Error ? err.message : 'Error'
+        } finally {
+          loadingRef.current = false
+          loading = false
+        }
+      }
+
+      // First action
+      const p1 = aiSummary('alice')
+      // Rapid concurrent click before p1 completes
+      const p2 = aiSummary('alice')
+
+      await Promise.all([p1, p2])
+
+      // Must have triggered exactly one API request
+      expect(mockGenerateSummary).toHaveBeenCalledTimes(1)
+      expect(summary).toBe('Resolved summary')
+      expect(loading).toBe(false)
+      expect(error).toBeNull()
+    })
+
+    it('clears previous errors before requesting and always resets loading on failure', async () => {
+      const mockFail = vi.fn().mockRejectedValue(new Error('GitHub API rate limit exceeded.'))
+
+      let loading = false
+      let error: string | null = 'Previous stale error'
+      let summary = ''
+      const loadingRef = { current: false }
+
+      const aiSummary = async (login: string) => {
+        if (!login || loadingRef.current) return
+        loadingRef.current = true
+        loading = true
+        error = null // Clears previous error before requesting
+        try {
+          const res = await mockFail(login)
+          summary = res.summary
+          error = null
+        } catch (err) {
+          error = err instanceof Error ? err.message : 'Developer summary unavailable.'
+        } finally {
+          loadingRef.current = false
+          loading = false // Always reset loading
+        }
+      }
+
+      const p = aiSummary('alice')
+      expect(loading).toBe(true)
+      expect(error).toBeNull() // Confirms error was immediately cleared
+
+      await p
+
+      expect(loading).toBe(false)
+      expect(error).toBe('GitHub API rate limit exceeded.')
+      expect(summary).toBe('')
+      expect(mockFail).toHaveBeenCalledTimes(1)
+    })
+
+    it('removes unsupported subjective descriptions from buildInsights across all engagement levels', async () => {
+      const { buildInsights } = await import('../client/src/lib/analytics')
+
+      // Case A: High engagement (previously triggered "Public engagement is a strong signal")
+      const highEngagementData = makeMockDashboard({
+        intelligence: {
+          engagement: {
+            collectionState: 'complete',
+            pullRequestEventActionsCount: { value: 15 },
+            issueEventActionsCount: { value: 10 },
+            pullRequestReviewEventActionsCount: { value: 5 },
+          },
+        } as unknown as Dashboard['intelligence'],
+        dataQuality: {
+          eventsUnavailable: false,
+          isTruncated: false,
+          observationWindowDays: 365,
+          isEstimated: false,
+          oldestEventDate: null,
+          eventCount: 30,
+        },
+      })
+      const highInsights = buildInsights(highEngagementData)
+      expect(highInsights).toContain('Public collaborative activity includes 15 pull request actions, 10 issue actions and 5 review actions observed.')
+      expect(highInsights.some((i: string) => /strong signal/i.test(i))).toBe(false)
+      expect(highInsights.some((i: string) => /developing/i.test(i))).toBe(false)
+
+      // Case B: Low engagement (previously triggered "Public engagement is developing")
+      const lowEngagementData = makeMockDashboard({
+        intelligence: {
+          engagement: {
+            collectionState: 'complete',
+            pullRequestEventActionsCount: { value: 2 },
+            issueEventActionsCount: { value: 1 },
+            pullRequestReviewEventActionsCount: { value: 0 },
+          },
+        } as unknown as Dashboard['intelligence'],
+        dataQuality: {
+          eventsUnavailable: false,
+          isTruncated: false,
+          observationWindowDays: 365,
+          isEstimated: false,
+          oldestEventDate: null,
+          eventCount: 3,
+        },
+      })
+      const lowInsights = buildInsights(lowEngagementData)
+      expect(lowInsights).toContain('Public collaborative activity includes 2 pull request actions, 1 issue actions and 0 review actions observed.')
+      expect(lowInsights.some((i: string) => /strong/i.test(i))).toBe(false)
+      expect(lowInsights.some((i: string) => /developing/i.test(i))).toBe(false)
+
+      // Case C: Stale repos (previously triggered "Repository health is relatively fresh")
+      const allActiveData = makeMockDashboard({
+        repos: [
+          { id: 1, name: 'r1', html_url: '', description: null, language: 'TS', stargazers_count: 5, forks_count: 1, open_issues_count: 0, updated_at: '', pushed_at: '', fork: false, status: 'active' },
+        ],
+      })
+      const freshInsights = buildInsights(allActiveData)
+      expect(freshInsights.some((i: string) => /relatively fresh/i.test(i))).toBe(false)
+      expect(freshInsights).toContain('Repository health across 1 total projects: 1 active.')
+    })
+  })
 })

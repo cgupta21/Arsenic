@@ -66,8 +66,13 @@ export function DeveloperSummaryCard({
                 <p className="summaryAlertMessage">{summaryError}</p>
               </div>
             </div>
-            <button className="primaryBtn summaryRetryBtn" onClick={onGenerate}>
-              <RefreshCw size={14} /> Try again
+            <button
+              type="button"
+              className="primaryBtn summaryRetryBtn"
+              onClick={onGenerate}
+              disabled={summaryLoading}
+            >
+              <RefreshCw size={14} className={summaryLoading ? 'spin' : ''} /> Try again
             </button>
           </div>
         ) : !summary ? (
@@ -75,7 +80,12 @@ export function DeveloperSummaryCard({
             <p className="summaryEmptyText">
               Generate a concise, evidence-based profile summary synthesized directly from Arsenic's verified GitHub telemetry. Analyzes repository health, contribution velocity, language concentration, and commit cadence without external AI or LLM API calls.
             </p>
-            <button className="primaryBtn generateSummaryBtn" onClick={onGenerate}>
+            <button
+              type="button"
+              className="primaryBtn generateSummaryBtn"
+              onClick={onGenerate}
+              disabled={summaryLoading}
+            >
               Generate summary <Sparkles size={15} />
             </button>
           </div>
@@ -183,6 +193,7 @@ export function DeveloperSummaryCard({
             {/* Footer with Refresh button */}
             <div className="summaryFooter">
               <button
+                type="button"
                 className="secondaryBtn refreshSummaryBtn"
                 onClick={onGenerate}
                 disabled={summaryLoading}

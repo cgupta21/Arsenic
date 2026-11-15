@@ -234,7 +234,31 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .stat span { font-size: 11px; color: var(--muted); }
 .stat.accent { border-color: rgba(201,106,69,.42); background: rgba(201,106,69,.08); }
 .stat.accent .statIcon, .stat.accent strong { color: var(--terracotta); }
-.dashboardGrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 10px; margin-top: 10px; min-width: 0; }
+.dashboardGrid,
+.dashboardColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+  min-width: 0;
+  align-items: start;
+}
+.dashboardCol,
+.dashboardColSingle {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.dashboardCol > .card,
+.dashboardColSingle > .card {
+  width: 100%;
+}
+.dashboardFullWidth {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-width: 0;
+}
 .card { border: 1px solid var(--border); background: var(--card); border-radius: 14px; padding: 20px; min-height: 265px; box-shadow: 0 12px 30px var(--shadow); display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
 .cardHead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 17px; }
 .cardHead h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; }
@@ -255,13 +279,25 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .meter { height: 7px; background: var(--card2); border-radius: 99px; overflow: hidden; margin-top: 7px; }
 .meter span { height: 100%; display: block; background: linear-gradient(90deg, var(--sage), var(--terracotta)); border-radius: inherit; }
 .scoreNote, .mutedSmall { color: var(--muted); font-size: 10px; line-height: 1.6; margin: 6px 0 0; }
+.card.contributionCard,
+.card:has(.heatmapWrap) {
+  align-self: start;
+  min-height: auto;
+  height: fit-content;
+  width: 100%;
+}
+.dashboardFullWidth .card.contributionCard .heatmapMeta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 220px));
+  gap: 12px;
+}
 .heatmapWrap { display: flex; flex-direction: column; gap: 15px; min-width: 0; max-width: 100%; }
 .heatmapMeta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .heatmapMeta > div { padding: 12px; border: 1px solid var(--border); border-radius: 10px; min-width: 0; }
 .heatmapMeta b { display: block; font-size: 18px; }
 .heatmapMeta span { display: block; color: var(--muted); font-size: 10px; margin-top: 3px; }
-.heatmap { display: grid; grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; grid-auto-columns: minmax(5px, 1fr); gap: 3px; overflow-x: auto; padding-bottom: 2px; max-width: 100%; -webkit-overflow-scrolling: touch; }
-.heatmap span { aspect-ratio: 1; border-radius: 2px; background: var(--card2); }
+.heatmap { display: grid; grid-template-columns: repeat(53, minmax(0, 1fr)); grid-auto-columns: minmax(0, 1fr); grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; gap: 3px; overflow: visible; padding-bottom: 2px; width: 100%; max-width: 100%; }
+.heatmap span { aspect-ratio: 1; border-radius: 2px; background: var(--card2); min-width: 0; }
 .heatmap .pad { background: transparent; }
 .heatmap .levelUnobserved { background: rgba(255, 255, 255, 0.04); opacity: 0.6; }
 .heatmap .level1 { background: color-mix(in srgb, var(--sage) 35%, var(--card2)); }
@@ -343,8 +379,9 @@ h1 em { color: var(--terracotta); font-style: normal; }
 .winner { grid-column:1 / -1; display:inline-flex; justify-content:center; align-items:center; gap:8px; color:var(--sand); padding:12px; border:1px solid rgba(229,211,179,.18); border-radius:10px; background:rgba(229,211,179,.05); }
 @media (max-width: 980px) {
   .hero { flex-direction: column; align-items: stretch; min-height: auto; }.searchBox { min-width:0; width:100%; }
-  .statsGrid { grid-template-columns: repeat(3, 1fr); }.dashboardGrid { grid-template-columns: minmax(0, 1fr); }.repoGrid { grid-template-columns: repeat(2,1fr); }
+  .statsGrid { grid-template-columns: repeat(3, 1fr); }.dashboardGrid, .dashboardColumns { grid-template-columns: minmax(0, 1fr); }.repoGrid { grid-template-columns: repeat(2,1fr); }
   .compareForm { grid-template-columns:1fr 1fr; }.compareArrow { display:none; }.compareForm .primaryBtn { grid-column:1 / -1; }
+  .heatmap { gap: 2.5px; }
 }
 @keyframes mobileNavIn {
   from {
@@ -456,6 +493,9 @@ h1 em { color: var(--terracotta); font-style: normal; }
   .statsGrid { grid-template-columns: repeat(2,1fr); }.repoGrid,.compareGrid { grid-template-columns:1fr; }.sectionHead { align-items:flex-start; flex-direction:column; }.filters { width:100%; }.filters select { flex:1; }
   .shareLayout { flex-direction:column; align-items:stretch; }.shareCard { width:100%; padding:24px 20px; }.exportActions { flex-direction:row; width:100%; gap:10px; }.exportActions .ghostBtn { flex:1; justify-content:center; }
   .shareGrid { grid-template-columns:repeat(2,1fr); }.compareStats { grid-template-columns:repeat(2,1fr); }.compareForm { grid-template-columns:1fr; }.compareForm .primaryBtn { grid-column:auto; }
+  .dashboardFullWidth .card.contributionCard .heatmapMeta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .heatmap { gap: 1.5px; }
+  .heatmap span { border-radius: 1px; }
 }
 
 @media (max-width: 640px) {
@@ -538,6 +578,7 @@ h1 em { color: var(--terracotta); font-style: normal; }
   .card { padding:16px; border-radius:12px; } .profileCard { padding:16px; gap:14px; } .avatar { width:64px; height:64px; border-radius:12px; } .profileInfo { min-width:calc(100% - 80px); } .profileName h2 { font-size:19px; }
   .stat { padding:13px 11px; } .stat strong { font-size:21px; }
   .heatmapMeta { gap:6px; } .heatmapMeta > div { padding:8px 10px; } .heatmapMeta b { font-size:16px; } .heatmapMeta span { font-size:9px; }
+  .heatmap { gap: 1px; }
   .shareCard { padding:18px 14px; border-radius:14px; } .shareIdentity { gap:10px; margin-top:20px; } .shareIdentity img { width:48px; height:48px; border-radius:10px; } .shareIdentity h3 { font-size:17px; } .shareIdentity strong { font-size:34px; } .shareGrid { gap:6px; margin-top:20px; } .shareGrid > div { padding:10px 8px; } .shareGrid b { font-size:17px; }
   .compareColumn { padding:16px 14px; border-radius:12px; } .compareBars > div { grid-template-columns:78px minmax(0,1fr) 24px; gap:6px; }
   .loginPrompt { padding:22px 16px; border-radius:14px; } .toast { top:70px; right:16px; left:16px; max-width:none; }
@@ -575,7 +616,8 @@ h1 em { color: var(--terracotta); font-style: normal; }
   .nav a, .nav button { padding: 10px 12px; font-size: 13px; }
   .searchBox { padding:4px; height:44px; } .searchBox input { font-size:12px; padding:0 6px; } .searchBox button { height:36px; padding:0 10px; font-size:12px; }
   .profileCard { padding:12px; gap:10px; } .avatar { width:54px; height:54px; } .profileInfo { min-width:calc(100% - 66px); } .profileName h2 { font-size:17px; }
-  .stat strong { font-size:18px; } .heatmapMeta { grid-template-columns: minmax(0, 1fr); }
+  .stat strong { font-size:18px; } .heatmapMeta, .dashboardFullWidth .card.contributionCard .heatmapMeta { grid-template-columns: minmax(0, 1fr); }
+  .heatmap { gap: 0.75px; }
   .filters { flex-direction:column; } .filters select { width:100%; }
 }
 @media (prefers-reduced-motion: reduce) {

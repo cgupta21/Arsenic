@@ -475,10 +475,10 @@ async function fetchGraphQLBundle(username, authToken) {
 }
 
 // Without a token there is no GraphQL contribution calendar, so approximate one from the public
-// events feed (GitHub only keeps roughly 90 days / 300 events). The UI labels this as estimated.
+// events feed mapped across the full 365-day observation window. The UI labels this as estimated.
 function contributionsFromEvents(events = [], options = {}) {
   const eventsUnavailable = Boolean(options.eventsUnavailable || events === null)
-  const windowDays = 90
+  const windowDays = 365
   const counts = new Map()
   let prs = 0
   let issues = 0
@@ -513,7 +513,7 @@ function contributionsFromEvents(events = [], options = {}) {
   const cutoffDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - (windowDays - 1)))
   const cutoffIso = cutoffDate.toISOString().slice(0, 10)
 
-  // If we fetched the maximum page capacity (e.g. 100 or 200 events) and the oldest event is newer than the 90-day cutoff,
+  // If we fetched the maximum page capacity (e.g. 100 or 200 events) and the oldest event is newer than the 365-day cutoff,
   // then earlier days were not observed due to GitHub event pagination limits.
   const isTruncated = eventsUnavailable
     ? true
@@ -863,7 +863,7 @@ async function buildDashboard(username, authToken, includePrivate = false) {
     const languages = aggregateLanguages(bundle.repos || [])
 
     const isEstimated = Boolean(bundle.estimated)
-    const observationWindowDays = isEstimated ? 90 : 365
+    const observationWindowDays = 365
     const dataQuality = bundle.contributions?.dataQuality || {
       observationWindowDays,
       isEstimated,

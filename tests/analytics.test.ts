@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildInsights, heatmapCells } from '../client/src/lib/analytics'
+import { normalizeHeatmapDays } from '../client/src/components/ContributionHeatmap'
 import { calculateScore } from '../shared/score.js'
 import { generateDeveloperSummary } from '../shared/summary.js'
 
@@ -49,6 +50,19 @@ describe('heatmap layout', () => {
 
   it('returns nothing for an empty calendar', () => {
     expect(heatmapCells([])).toEqual([])
+  })
+
+  it('normalizes arbitrary days to 365 days and pads to 53 weeks (371 cells)', () => {
+    const rawDays = [{ date: '2026-10-15', contributionCount: 5, weekday: 4, isObserved: true }]
+    const normalized = normalizeHeatmapDays(rawDays)
+    expect(normalized.length).toBe(365)
+    
+    const cells = heatmapCells(normalized)
+    // 53 columns * 7 rows = 371 cells
+    expect(cells.length).toBe(371)
+    
+    const found = cells.find((c) => c?.date === '2026-10-15')
+    expect(found?.contributionCount).toBe(5)
   })
 })
 

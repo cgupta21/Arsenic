@@ -26,7 +26,7 @@ export function buildInsights(data: Dashboard) {
   } else if (contributions.currentStreak >= 7) {
     insights.push(`${user.name || `@${user.login}`} currently has a ${contributions.currentStreak}-day contribution streak.`)
   } else {
-    insights.push(`${user.name || `@${user.login}`} has ${contributions.activeDays} active contribution days in the last ${data.estimated ? '90 days (estimated from public events)' : 'year'}.`)
+    insights.push(`${user.name || `@${user.login}`} has ${contributions.activeDays} active contribution days in the last ${data.estimated ? '365 days (estimated from public events)' : 'year'}.`)
   }
   if (languages[0]) {
     insights.push(`${languages[0].name} leads by code volume across the analyzed repositories.`)
@@ -50,12 +50,17 @@ export function buildInsights(data: Dashboard) {
   return insights.slice(0, 4)
 }
 
-// Pads the start so the first column begins on the correct weekday (Sunday = row 1), like GitHub's calendar.
+// Pads the start so the first column begins on the correct weekday (Sunday = row 1)
+// and pads the end so the final column completes all 7 weekdays, matching GitHub's 53-week calendar.
 export function heatmapCells(days: Dashboard['contributions']['days']) {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date)).slice(-371)
   if (!sorted.length) return []
   const firstWeekday = new Date(`${sorted[0].date}T00:00:00Z`).getUTCDay()
-  return [...Array.from({ length: firstWeekday }, () => null), ...sorted] as (Dashboard['contributions']['days'][number] | null)[]
+  const leadingPads = Array.from({ length: firstWeekday }, () => null)
+  const allCells = [...leadingPads, ...sorted] as (Dashboard['contributions']['days'][number] | null)[]
+  const remainder = allCells.length % 7
+  const trailingPads = remainder > 0 ? Array.from({ length: 7 - remainder }, () => null) : []
+  return [...allCells, ...trailingPads]
 }
 
 export function topTiming(data: Dashboard) {

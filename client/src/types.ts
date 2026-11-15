@@ -45,7 +45,7 @@ export type User = {
 }
 
 export type Repo = {
-  id: number
+  id: number | string
   name: string
   html_url: string
   description: string | null
@@ -55,7 +55,7 @@ export type Repo = {
   forks_count: number
   open_issues_count: number
   updated_at: string
-  pushed_at: string | null
+  pushed_at?: string | null
   fork: boolean
   archived?: boolean
   status?: 'active' | 'watch' | 'stale' | 'archived'

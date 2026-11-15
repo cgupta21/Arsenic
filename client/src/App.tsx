@@ -849,7 +849,9 @@ function DashboardView({
       .sort((a, b) => {
         if (sort === 'stars') return b.stargazers_count - a.stargazers_count
         if (sort === 'language') return (a.language || 'zzzz').localeCompare(b.language || 'zzzz')
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        const timeA = a.pushed_at || a.updated_at ? new Date(a.pushed_at || a.updated_at).getTime() : 0
+        const timeB = b.pushed_at || b.updated_at ? new Date(b.pushed_at || b.updated_at).getTime() : 0
+        return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA)
       })
   }, [data, language, sort, status])
 

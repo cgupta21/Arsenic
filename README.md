@@ -67,7 +67,7 @@ Genuine captures from Arsenic's deployed production interface (1440 × 900 deskt
 
 ## Key Features
 
-- **Developer Intelligence Synthesis:** Real-time health scoring (0–100) based on weighted pillars in [`shared/score.js`](shared/score.js)—Consistency (45%), Collaboration (30%), and Impact (25%)—paired with dynamic behavioral badges and a 64-day contribution density matrix.
+- **Developer Intelligence Synthesis:** Real-time health scoring (0–100) based on weighted pillars in [`shared/score.js`](shared/score.js)—Consistency (45%), Collaboration (30%), and Impact (25%)—paired with dynamic behavioral badges and a full 365-day contribution heatmap with 53 weekly columns.
 - **Repository Health & Volume:** Categorizes non-fork repositories into maintenance statuses (`Active`, `Watch`, `Stale`, `Archived`) with issue backlog ratios and byte-level language distributions.
 - **Side-by-Side Comparison:** Head-to-head benchmarking at `/compare` between any two developers with delta indicators, comparative metric bars, and category leader tags.
 - **Deterministic Summaries:** Locally generated profile narratives via [`shared/summary.js`](shared/summary.js) analyzing language concentration, maintenance cadence, and review activity—no third-party AI keys required.
@@ -86,7 +86,7 @@ For full architectural details, see the [Deployment Guide](docs/deployment.md).
 | **Backend** | Node.js (24.x), Express, Helmet, iron-session, jose |
 | **APIs** | GitHub REST & GraphQL API (2022-11-28), Google Cloud OAuth 2.0 |
 | **Export Engines** | html2canvas, jsPDF |
-| **Testing** | Vitest (15 test suites, 291 automated tests) |
+| **Testing** | Vitest (19 test suites, 410 automated tests) |
 | **Deployment** | Vercel Serverless (Primary), Standalone Node.js, Docker |
 
 ---

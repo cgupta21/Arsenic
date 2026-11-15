@@ -116,7 +116,7 @@ npm start
 
 ### Docker Container
 A multi-stage [`Dockerfile`](../Dockerfile) is included in the repository root:
-1. **Stage 1 (Builder):** Uses `node:22-alpine` to install devDependencies and run `npm run build`.
+1. **Stage 1 (Builder):** Uses `node:24-alpine` to install devDependencies and run `npm run build`.
 2. **Stage 2 (Runtime):** Copies only production dependencies, the compiled `client/dist` directory, and server code.
 
 To build and run locally:

@@ -18,6 +18,7 @@ import { CompareView } from './components/CompareView'
 import { LandingPage } from './components/LandingPage'
 import { RegisterPage } from './components/RegisterPage'
 import { DeveloperIntelligenceOverview } from './components/DeveloperIntelligenceOverview'
+import { DeveloperSummaryCard } from './components/DeveloperSummaryCard'
 import { PrivacyPolicy, TermsOfService, CookiePolicy } from './components/legal'
 
 const fallbackUser = 'cgupta21'
@@ -829,11 +830,15 @@ function DashboardView({
   const [language, setLanguage] = useState('all')
   const [summary, setSummary] = useState('')
   const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const summaryLoadingRef = useRef(false)
   const shareRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setSummary('')
     setSummaryLoading(false)
+    setSummaryError(null)
+    summaryLoadingRef.current = false
   }, [username])
 
   const repos = useMemo(() => {
@@ -859,9 +864,20 @@ function DashboardView({
   }, [data])
 
   const aiSummary = async () => {
-    if (!data || summaryLoading) return
+    if (!data?.user?.login || summaryLoadingRef.current) return
+    summaryLoadingRef.current = true
     setSummaryLoading(true)
-    try { setSummary((await generateSummary(data.user.login)).summary) } catch (caught) { setSummary(caught instanceof Error ? caught.message : 'Developer summary unavailable.') } finally { setSummaryLoading(false) }
+    setSummaryError(null)
+    try {
+      const res = await generateSummary(data.user.login)
+      setSummary(res.summary)
+      setSummaryError(null)
+    } catch (caught) {
+      setSummaryError(caught instanceof Error ? caught.message : 'Developer summary unavailable.')
+    } finally {
+      summaryLoadingRef.current = false
+      setSummaryLoading(false)
+    }
   }
 
   const handleDashboardSubmit = async (event: FormEvent) => {
@@ -1008,14 +1024,14 @@ function DashboardView({
             )}
           </div>
         )}
-        {loading && !data ? <div className="loading"><span className="pulseDot" /> Reading GitHub signals for @{username}…</div> : data ? <DashboardContent data={data} repos={repos} sort={sort} setSort={setSort} status={status} setStatus={setStatus} language={language} setLanguage={setLanguage} weeklyActivity={weeklyActivity} insights={insights} shareRef={shareRef} summary={summary} summaryLoading={summaryLoading} aiSummary={aiSummary} sessionUser={sessionUser} /> : null}
+        {loading && !data ? <div className="loading"><span className="pulseDot" /> Reading GitHub signals for @{username}…</div> : data ? <DashboardContent data={data} repos={repos} sort={sort} setSort={setSort} status={status} setStatus={setStatus} language={language} setLanguage={setLanguage} weeklyActivity={weeklyActivity} insights={insights} shareRef={shareRef} summary={summary} summaryLoading={summaryLoading} summaryError={summaryError} aiSummary={aiSummary} sessionUser={sessionUser} /> : null}
       </main>
     </>
   )
 }
 
 function DashboardContent({
-  data, repos, sort, setSort, status, setStatus, language, setLanguage, weeklyActivity, insights, shareRef, summary, summaryLoading, aiSummary, sessionUser,
+  data, repos, sort, setSort, status, setStatus, language, setLanguage, weeklyActivity, insights, shareRef, summary, summaryLoading, summaryError, aiSummary, sessionUser,
 }: {
   data: Dashboard
   repos: Dashboard['repos']
@@ -1030,6 +1046,7 @@ function DashboardContent({
   shareRef: RefObject<HTMLDivElement>
   summary: string
   summaryLoading: boolean
+  summaryError: string | null
   aiSummary: () => void
   sessionUser: { login: string } | null
 }) {
@@ -1235,9 +1252,13 @@ function DashboardContent({
       </section>
 
       <section id="insights" className="dashboardGrid bottom">
-        <Card title="Intelligent developer summary" icon={<Sparkles />} action="Deterministic analysis">
-          <div className="aiPanel">{summary ? <div className="aiText">{summary}</div> : <p className="mutedSmall">Generate a concise summary directly from the GitHub metrics Arsenic collected. No external AI service or paid API key is required.</p>}<button className="primaryBtn" onClick={aiSummary} disabled={summaryLoading}>{summaryLoading ? 'Building…' : 'Generate summary'} <Sparkles size={15} /></button></div>
-        </Card>
+        <DeveloperSummaryCard
+          data={data}
+          summary={summary}
+          summaryLoading={summaryLoading}
+          summaryError={summaryError}
+          onGenerate={aiSummary}
+        />
         <Card title="Recent GitHub activity" icon={<Activity />} action={`${data.events.length} events`}>
           <div className="events">{data.events.slice(0, 8).map((event) => <div className="event" key={event.id}><div className="eventIcon"><CheckCircle2 size={15} /></div><div><b>{event.type.replace('Event', '')}</b><small>{event.repo.name} · {relativeDays(event.created_at)}d ago</small></div></div>)}</div>
         </Card>

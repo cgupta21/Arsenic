@@ -262,4 +262,66 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
       expect(stylesCss).toContain('.privacyModal')
     })
   })
+
+  describe('6. Dashboard Contribution Signal Card Layout Sizing', () => {
+    it('applies contributionCard class and non-stretching sizing to One-year contribution signal card', () => {
+      expect(appCode).toMatch(/<Card\s+className="contributionCard"[\s\S]*?One-year contribution signal/)
+      expect(stylesCss).toMatch(/\.contributionCard[\s\S]*?align-self:\s*start/)
+      expect(stylesCss).toMatch(/\.contributionCard[\s\S]*?min-height:\s*auto/)
+      expect(stylesCss).toMatch(/\.contributionCard[\s\S]*?height:\s*fit-content/)
+    })
+  })
+
+  describe('7. Dashboard Analytics Rearrangement & Landscape Layout', () => {
+    it('structures analytics cards in the exact circular rearrangement with landscape contribution signal', () => {
+      expect(appCode).toContain('dashboardColumns')
+      expect(appCode).toContain('dashboardColLeft')
+      expect(appCode).toContain('dashboardColRight')
+      expect(appCode).toContain('dashboardFullWidth')
+      expect(stylesCss).toContain('.dashboardColumns')
+      expect(stylesCss).toContain('.dashboardCol')
+      expect(stylesCss).toContain('.dashboardFullWidth')
+
+      // Left column contains: Intelligence dimensions (L1) and 8-week contribution trend (L2)
+      expect(appCode).toMatch(/dashboardColLeft[\s\S]*?dimensionsCard[\s\S]*?trendCard/)
+
+      // Right column contains: Language mix (R1), Developer insights (R2), Commit timing patterns (R3)
+      expect(appCode).toMatch(/dashboardColRight[\s\S]*?languagesCard[\s\S]*?insightsCard[\s\S]*?timingCard/)
+
+      // Full-width landscape card contains: One-year contribution signal (365 days)
+      expect(appCode).toMatch(/dashboardFullWidth[\s\S]*?contributionCard/)
+
+      // Verifies that CSS order is NOT used to establish semantic order:
+      expect(stylesCss).not.toMatch(/\.cardDimensions\s*\{\s*order:/)
+      expect(stylesCss).not.toMatch(/\.cardWeeklyTrend\s*\{\s*order:/)
+      expect(stylesCss).not.toMatch(/display:\s*contents/)
+    })
+
+    it('uses responsive cell sizing for heatmap across screen widths without forced horizontal scroll', () => {
+      expect(stylesCss).toMatch(/\.heatmap\s*\{[^}]*grid-auto-columns:\s*minmax\(0,\s*1fr\)/)
+      expect(stylesCss).not.toMatch(/\.heatmap\s*\{[^}]*overflow-x:\s*auto/)
+    })
+  })
+
+  describe('8. One-Year Contribution Signal Observation Window (365 Days)', () => {
+    it('uses One-year contribution signal (365 days) heading and 365-day observation window', async () => {
+      expect(appCode).toContain("One-year contribution signal (365 days)")
+
+      // @ts-expect-error – server/index.js is plain JS without declaration files
+      const serverModule = await import('../server/index.js')
+      const result = serverModule.contributionsFromEvents([])
+      expect(result.dataQuality.observationWindowDays).toBe(365)
+
+      const days = result.contributionCalendar.weeks[0].contributionDays
+      expect(days.length).toBe(365)
+
+      // Timezone boundary check: starts 364 days ago UTC and ends today UTC
+      const today = new Date()
+      const expectedEnd = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10)
+      const expectedStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 364)).toISOString().slice(0, 10)
+
+      expect(days[days.length - 1].date).toBe(expectedEnd)
+      expect(days[0].date).toBe(expectedStart)
+    })
+  })
 })

@@ -1037,6 +1037,79 @@ function DashboardContent({
   const languages = data.languages
   const privateForSelf = Boolean(sessionUser && sessionUser.login.toLowerCase() === user.login.toLowerCase())
 
+  const dimensionsCard = (
+    <Card className="cardDimensions" title="Intelligence dimensions" icon={<Sparkles />} action={data.intelligence ? `${data.intelligence.activity.observationWindowDays}-day observation window` : 'Multidimensional telemetry'}>
+      <ScoreBreakdown dashboard={data} />
+    </Card>
+  )
+
+  const contributionCard = (
+    <Card className="contributionCard" title={data.estimated ? 'One-year contribution signal (365 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.contributions.activeDays != null ? (data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`) : 'Activity unobserved'}>
+      <ContributionHeatmap data={data} />
+    </Card>
+  )
+
+  const trendCard = (
+    <Card className="cardWeeklyTrend" title="8-week contribution trend" icon={<BarChart3 />} action="Contribution calendar">
+      <div className="chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={weeklyActivity}>
+            <defs>
+              <linearGradient id="fillArsenic" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#C96A45" stopOpacity=".42" />
+                <stop offset="100%" stopColor="#C96A45" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" />
+            <XAxis dataKey="week" stroke="var(--muted)" fontSize={11} />
+            <YAxis allowDecimals={false} stroke="var(--muted)" fontSize={11} />
+            <Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text)' }} />
+            <Area type="monotone" dataKey="activity" stroke="#C96A45" fill="url(#fillArsenic)" strokeWidth={2.5} />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
+  )
+
+  const languagesCard = (
+    <Card className="cardLanguages" title="Language mix by code volume" icon={<Code2 />} action={`${languages.length} detected`}>
+      <div className="languageList">
+        {languages.length ? languages.map((item) => (
+          <div className="langRow" key={item.name}>
+            <div className="langLabel">
+              <span className="langDot" style={{ background: item.color || 'var(--terracotta)' }} />
+              {item.name}
+              <b>{item.pct}%</b>
+            </div>
+            <div className="bar">
+              <span style={{ width: `${item.pct}%`, background: item.color || 'var(--terracotta)' }} />
+            </div>
+          </div>
+        )) : <Empty text="No language data found." />}
+      </div>
+      <p className="mutedSmall">{data.authenticated ? 'Aggregated from repository language byte counts.' : 'Public-mode fallback: primary language signals. Add GITHUB_TOKEN for code-volume accuracy.'}</p>
+    </Card>
+  )
+
+  const timingCard = (
+    <Card className="cardTimingPatterns" title="Commit timing patterns" icon={<CalendarDays />} action="Sampled recent commits">
+      <TimingPatterns data={data} />
+    </Card>
+  )
+
+  const insightsCard = (
+    <Card className="cardInsights" title="Developer insights" icon={<Sparkles />} action={`${insights.length} signals`}>
+      <div className="insights">
+        {insights.map((item, index) => (
+          <div className="insight" key={item}>
+            <span className="insightNum">0{index + 1}</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+
   return (
     <>
       {data.estimated && (
@@ -1101,22 +1174,21 @@ function DashboardContent({
         <DeveloperIntelligenceOverview data={data} />
       </section>
 
-      <section className="dashboardGrid">
-        <Card title="Intelligence dimensions" icon={<Sparkles />} action={data.intelligence ? `${data.intelligence.activity.observationWindowDays}-day observation window` : 'Multidimensional telemetry'}><ScoreBreakdown dashboard={data} /></Card>
-        <Card title={data.estimated ? 'Recent contribution signal (~90 days)' : 'One-year contribution signal'} icon={<BarChart3 />} action={data.contributions.activeDays != null ? (data.estimated ? `${data.contributions.activeDays} active days · est.` : `${data.contributions.activeDays} active days`) : 'Activity unobserved'}><ContributionHeatmap data={data} /></Card>
-      </section>
+      <section id="activity" className="dashboardColumns" aria-label="Activity and Intelligence">
+        <div className="dashboardCol dashboardColLeft">
+          {dimensionsCard}
+          {trendCard}
+        </div>
 
-      <section id="activity" className="dashboardGrid">
-        <Card title="8-week contribution trend" icon={<BarChart3 />} action="Contribution calendar"><div className="chart"><ResponsiveContainer width="100%" height="100%"><AreaChart data={weeklyActivity}><defs><linearGradient id="fillArsenic" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#C96A45" stopOpacity=".42" /><stop offset="100%" stopColor="#C96A45" stopOpacity="0" /></linearGradient></defs><CartesianGrid strokeDasharray="3 3" stroke="var(--grid)" /><XAxis dataKey="week" stroke="var(--muted)" fontSize={11} /><YAxis allowDecimals={false} stroke="var(--muted)" fontSize={11} /><Tooltip contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, color: 'var(--text)' }} /><Area type="monotone" dataKey="activity" stroke="#C96A45" fill="url(#fillArsenic)" strokeWidth={2.5} /></AreaChart></ResponsiveContainer></div></Card>
-        <Card title="Language mix by code volume" icon={<Code2 />} action={`${languages.length} detected`}>
-          <div className="languageList">{languages.length ? languages.map((item) => <div className="langRow" key={item.name}><div className="langLabel"><span className="langDot" style={{ background: item.color || 'var(--terracotta)' }} />{item.name}<b>{item.pct}%</b></div><div className="bar"><span style={{ width: `${item.pct}%`, background: item.color || 'var(--terracotta)' }} /></div></div>) : <Empty text="No language data found." />}</div>
-          <p className="mutedSmall">{data.authenticated ? 'Aggregated from repository language byte counts.' : 'Public-mode fallback: primary language signals. Add GITHUB_TOKEN for code-volume accuracy.'}</p>
-        </Card>
-      </section>
+        <div className="dashboardCol dashboardColRight">
+          {languagesCard}
+          {insightsCard}
+          {timingCard}
+        </div>
 
-      <section className="dashboardGrid">
-        <Card title="Commit timing patterns" icon={<CalendarDays />} action="Sampled recent commits"><TimingPatterns data={data} /></Card>
-        <Card title="Developer insights" icon={<Sparkles />} action={`${insights.length} signals`}><div className="insights">{insights.map((item, index) => <div className="insight" key={item}><span className="insightNum">0{index + 1}</span><span>{item}</span></div>)}</div></Card>
+        <div className="dashboardFullWidth">
+          {contributionCard}
+        </div>
       </section>
 
       <section id="repositories">
@@ -1198,8 +1270,8 @@ function DashboardContent({
   )
 }
 
-function Card({ title, icon, action, children }: { title: string; icon: ReactNode; action?: string; children: ReactNode }) {
-  return <div className="card"><div className="cardHead"><h3>{icon}{title}</h3>{action && <span>{action}</span>}</div>{children}</div>
+function Card({ title, icon, action, children, className }: { title: string; icon: ReactNode; action?: string; children: ReactNode; className?: string }) {
+  return <div className={`card${className ? ` ${className}` : ''}`}><div className="cardHead"><h3>{icon}{title}</h3>{action && <span>{action}</span>}</div>{children}</div>
 }
 
 function Empty({ text }: { text: string }) { return <div className="empty">{text}</div> }

@@ -10,9 +10,58 @@ function levelClass(day: Dashboard['contributions']['days'][number] | null, even
   return 'level4'
 }
 
+export function normalizeHeatmapDays(
+  rawDays: Dashboard['contributions']['days'],
+  dataQuality?: Dashboard['dataQuality']
+): Dashboard['contributions']['days'] {
+  const dayMap = new Map<string, Dashboard['contributions']['days'][number]>()
+  for (const day of rawDays || []) {
+    if (day?.date) dayMap.set(day.date, day)
+  }
+
+  const eventsUnavailable = Boolean(dataQuality?.eventsUnavailable)
+  const isTruncated = Boolean(dataQuality?.isTruncated)
+  const oldestEventDate = dataQuality?.oldestEventDate || null
+
+  const today = new Date()
+  const todayIso = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())).toISOString().slice(0, 10)
+
+  let endIso = todayIso
+  if (rawDays && rawDays.length > 0) {
+    const sortedDates = [...rawDays].map((d) => d.date).sort()
+    const maxDate = sortedDates[sortedDates.length - 1]
+    if (maxDate && maxDate > todayIso) {
+      endIso = maxDate
+    }
+  }
+
+  const endDate = new Date(`${endIso}T00:00:00Z`)
+  const result: Dashboard['contributions']['days'] = []
+
+  for (let offset = 364; offset >= 0; offset -= 1) {
+    const d = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate() - offset))
+    const dateStr = d.toISOString().slice(0, 10)
+    const existing = dayMap.get(dateStr)
+    if (existing) {
+      result.push(existing)
+    } else {
+      const isObserved = !eventsUnavailable && (!isTruncated || !oldestEventDate || dateStr >= oldestEventDate)
+      result.push({
+        date: dateStr,
+        contributionCount: 0,
+        weekday: d.getUTCDay(),
+        isObserved,
+      })
+    }
+  }
+
+  return result
+}
+
 export function ContributionHeatmap({ data }: { data: Dashboard }) {
-  const cells = heatmapCells(data.contributions.days)
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
+  const fullYearDays = normalizeHeatmapDays(data.contributions.days, data.dataQuality)
+  const cells = heatmapCells(fullYearDays)
 
   return (
     <div className="heatmapWrap">

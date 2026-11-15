@@ -17,6 +17,8 @@ export function buildInsights(data: Dashboard) {
   const insights: string[] = []
   const stale = repos.filter((repo) => repo.status === 'stale').length
   const active = repos.filter((repo) => repo.status === 'active').length
+  const watch = repos.filter((repo) => repo.status === 'watch').length
+  const archived = repos.filter((repo) => repo.status === 'archived').length
 
   const eventsUnavailable = Boolean(data.dataQuality?.eventsUnavailable)
   const isTruncated = Boolean(data.dataQuality?.isTruncated)
@@ -36,16 +38,17 @@ export function buildInsights(data: Dashboard) {
     const prs = engagement.pullRequestEventActionsCount.value ?? 0
     const issues = engagement.issueEventActionsCount.value ?? 0
     const reviews = engagement.pullRequestReviewEventActionsCount.value ?? 0
-    if (prs + reviews + issues >= 10) {
-      insights.push(`Public engagement is a strong signal, with ${prs} pull request actions, ${issues} issue actions and ${reviews} review actions observed.`)
-    } else {
-      insights.push(`Public engagement is developing, with ${prs} pull request actions and ${issues} issue actions recorded.`)
+    if (prs + reviews + issues > 0) {
+      insights.push(`Public collaborative activity includes ${prs} pull request actions, ${issues} issue actions and ${reviews} review actions observed.`)
     }
   }
-  if (stale) {
-    insights.push(`${stale} repositories are stale; ${active} are active in the last 30 days.`)
-  } else {
-    insights.push(`Repository health is relatively fresh: ${active} repositories were updated within the last 30 days.`)
+  const repoBreakdownParts: string[] = []
+  if (active > 0) repoBreakdownParts.push(`${active} active`)
+  if (watch > 0) repoBreakdownParts.push(`${watch} watch`)
+  if (stale > 0) repoBreakdownParts.push(`${stale} stale`)
+  if (archived > 0) repoBreakdownParts.push(`${archived} archived`)
+  if (repoBreakdownParts.length > 0) {
+    insights.push(`Repository health across ${repos.length} total projects: ${repoBreakdownParts.join(', ')}.`)
   }
   return insights.slice(0, 4)
 }

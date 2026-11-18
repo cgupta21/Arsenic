@@ -3,9 +3,7 @@ import {
   Activity,
   ArrowRight,
   BarChart3,
-  CheckCircle2,
   FolderGit2,
-  GitBranch,
   Github,
   Search,
   Shield,
@@ -13,6 +11,8 @@ import {
   TrendingUp,
 } from 'lucide-react'
 import { normalizeGithubInput } from '../lib/normalizeGithubInput'
+import { DeveloperIntelligenceOverview } from './DeveloperIntelligenceOverview'
+import { sampleDashboardData } from '../lib/sampleDashboardData'
 
 interface LandingPageProps {
   onGetStarted: () => void
@@ -142,110 +142,13 @@ export function LandingPage({
 
         {/* Visual Preview of the Dashboard */}
         <div className="landingPreviewContainer">
-          <div className="dashboardPreviewCard" aria-label="Illustrative dashboard preview">
-            <div className="previewCardHeader">
-              <div className="previewCardTitle">
-                <Github size={15} />
-                <span>@cgupta21</span>
-                <span className="previewStatusBadge">Developer Profile • Active</span>
-              </div>
-              <div className="previewLivePill">
-                <span>Sample analysis</span>
-              </div>
-            </div>
-
-            <div className="previewCardBody">
-              {/* Top Score Strip */}
-              <div className="previewScoreStrip">
-                <div className="previewScoreMain">
-                  <div className="previewScoreValue">62</div>
-                  <div className="previewScoreMeta">
-                    <div className="scoreGrade">Recorded Contribution Days</div>
-                    <div className="scoreSubtext">Activity • Adoption • Reach • Maintenance • Community Engagement</div>
-                  </div>
-                </div>
-                <div className="previewScoreTags">
-                  <span className="previewTag tagSage">
-                    <CheckCircle2 size={12} /> Consistent commits
-                  </span>
-                  <span className="previewTag tagSand">
-                    <GitBranch size={12} /> Regular PR reviews
-                  </span>
-                </div>
-              </div>
-
-              {/* Metric Cards Row */}
-              <div className="previewMetricsGrid">
-                <div className="previewMetricItem">
-                  <span className="metricLabel">Total contributions</span>
-                  <span className="metricVal">1,842</span>
-                  <span className="metricTrend positive">457 PRs & commits</span>
-                </div>
-                <div className="previewMetricItem">
-                  <span className="metricLabel">Active streak</span>
-                  <span className="metricVal">42 days</span>
-                  <span className="metricTrend">Longest: 68 days</span>
-                </div>
-                <div className="previewMetricItem">
-                  <span className="metricLabel">Active days</span>
-                  <span className="metricVal">284 / 365</span>
-                  <span className="metricTrend positive">78% consistency</span>
-                </div>
-                <div className="previewMetricItem">
-                  <span className="metricLabel">Tracked repositories</span>
-                  <span className="metricVal">24 repos</span>
-                  <span className="metricTrend">84 stars earned</span>
-                </div>
-              </div>
-
-              {/* Visual Heatmap Mockup */}
-              <div className="previewHeatmapSection">
-                <div className="previewSectionLabel">
-                  <span>Contribution timing & density</span>
-                  <span className="heatmapLegendNote">Last 16 weeks</span>
-                </div>
-                <div className="previewHeatmapGrid" aria-hidden="true">
-                  {[
-                    1, 2, 3, 0, 2, 3, 2, 1, 3, 4, 2, 0, 1, 2, 3, 2,
-                    2, 3, 1, 0, 3, 2, 4, 1, 2, 3, 3, 0, 1, 2, 2, 1,
-                    3, 4, 3, 0, 2, 3, 2, 1, 1, 2, 4, 0, 3, 3, 2, 1,
-                    2, 3, 1, 0, 2, 4, 3, 1, 3, 2, 2, 0, 1, 3, 2, 1
-                  ].map((lvl, i) => (
-                    <div key={i} className={`heatmapCell lvl-${lvl}`} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Language Distribution & Architecture Takeaway */}
-              <div className="previewSummaryRow">
-                <div className="previewLangBar">
-                  <div className="langSegment ts" style={{ width: '58%' }} title="TypeScript 58%" />
-                  <div className="langSegment css" style={{ width: '22%' }} title="CSS 22%" />
-                  <div className="langSegment js" style={{ width: '14%' }} title="JavaScript 14%" />
-                  <div className="langSegment html" style={{ width: '6%' }} title="HTML 6%" />
-                </div>
-                <div className="previewLangLegend">
-                  <span className="langLegendItem"><span className="langDot ts" /> TypeScript (58%)</span>
-                  <span className="langLegendItem"><span className="langDot css" /> CSS (22%)</span>
-                  <span className="langLegendItem"><span className="langDot js" /> JavaScript (14%)</span>
-                  <span className="langLegendItem"><span className="langDot html" /> HTML (6%)</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="previewCardFooter">
-              <span className="previewCaption">
-                Sample analysis based on public developer metrics for @cgupta21
-              </span>
-              <button
-                type="button"
-                className="previewExploreBtn"
-                onClick={() => onSearch('cgupta21')}
-              >
-                Inspect live dashboard →
-              </button>
-            </div>
-          </div>
+          <DeveloperIntelligenceOverview
+            data={sampleDashboardData}
+            isSample={true}
+            sampleCaption="Sample analysis based on public developer metrics for @cgupta21"
+            onExplore={() => onSearch('cgupta21')}
+            className="dashboardPreviewCard"
+          />
         </div>
       </section>
 

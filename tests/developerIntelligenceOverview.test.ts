@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { renderToStaticMarkup } from 'react-dom/server'
 import React from 'react'
 import { DeveloperIntelligenceOverview } from '../client/src/components/DeveloperIntelligenceOverview'
+import { sampleDashboardData } from '../client/src/lib/sampleDashboardData'
 import type { Dashboard, DeveloperIntelligence, MetricValue } from '../client/src/types'
 
 function metricNum(n: number): MetricValue<number> {
@@ -1063,6 +1064,190 @@ describe('Developer Intelligence Overview in Dashboard', () => {
       expect(twoHtml).toContain('Low Collaboration')
       expect(twoHtml).toContain('Active Maintenance')
       expect(twoHtml).not.toContain('Solo Cadence')
+    })
+  })
+
+  describe('6. Sample-Mode Dashboard Preview Parity & Interactivity', () => {
+    interface ElementWithProps {
+      props?: {
+        className?: string
+        children?: React.ReactNode
+        onClick?: () => void
+      }
+    }
+
+    function findElementByClass(node: React.ReactNode, className: string): ElementWithProps | null {
+      if (!node || typeof node !== 'object') return null
+      const el = node as ElementWithProps
+      if (typeof el.props?.className === 'string' && el.props.className.includes(className)) {
+        return el
+      }
+      const children = el.props?.children
+      if (Array.isArray(children)) {
+        for (const child of children) {
+          const found = findElementByClass(child, className)
+          if (found) return found
+        }
+      } else if (children && typeof children === 'object') {
+        return findElementByClass(children, className)
+      }
+      return null
+    }
+
+    it('1. displays the "Sample analysis" indicator and pulsing indicator when isSample is true', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: sampleDashboardData,
+          isSample: true,
+        })
+      )
+      expect(html).toContain('class="pulseIndicator"')
+      expect(html).toContain('Sample analysis')
+      expect(html).not.toContain('Live Intelligence Overview')
+      expect(html).not.toContain('Refreshing Intelligence…')
+    })
+
+    it('2. displays the "DEVELOPER PROFILE • ACTIVE" status badge without live repo suffix', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: sampleDashboardData,
+          isSample: true,
+        })
+      )
+      expect(html).toContain('Developer Profile • Active')
+      expect(html).toContain('@cgupta21')
+      expect(html).not.toContain('@cgupta21 / Arsenic')
+      expect(html).not.toContain('Public API •')
+      expect(html).not.toContain('Authenticated •')
+    })
+
+    it('3. uses the illustrative dashboard preview ARIA label and landing sample dashboard id', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: sampleDashboardData,
+          isSample: true,
+          className: 'dashboardPreviewCard',
+        })
+      )
+      expect(html).toContain('aria-label="Illustrative dashboard preview"')
+      expect(html).toContain('id="landing-sample-dashboard"')
+      expect(html).toContain('class="dashboardOverviewWrap landingOverviewWrap"')
+      expect(html).toContain('class="previewWindowControls"')
+      expect(html).toContain('dot dotRed')
+      expect(html).toContain('dot dotYellow')
+      expect(html).toContain('dot dotGreen')
+    })
+
+    it('4. renders sample metrics and calculations correctly (streak, days, velocity, repos, languages)', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: sampleDashboardData,
+          isSample: true,
+        })
+      )
+      // Highlighted score strip
+      expect(html).toContain('62')
+      expect(html).toContain('Active Days Recorded')
+      expect(html).toContain('62 Active Days • 24 Non-Fork Repos • 84 Stars • 84 Followers')
+      expect(html).toContain('High Velocity')
+      expect(html).toContain('Steady Cadence')
+
+      // 4 metric cards
+      expect(html).toContain('1,842')
+      expect(html).toContain('-12% vs prior 4w')
+      expect(html).toContain('42 Days')
+      expect(html).toContain('Longest: 68d')
+      expect(html).toContain('0.3 / wk')
+      expect(html).toContain('14 PRs in window')
+      expect(html).toContain('24')
+      expect(html).toContain('84 Stars')
+
+      // Timing note and heatmap cells
+      expect(html).toContain('Peak: 05:00 UTC · Friday')
+      const cellMatches = html.match(/class="heatmapCell /g)
+      expect(cellMatches).toHaveLength(64)
+
+      // Language distribution bar and legend
+      expect(html).toContain('TypeScript (58%)')
+      expect(html).toContain('CSS (22%)')
+      expect(html).toContain('JavaScript (14%)')
+      expect(html).toContain('HTML (6%)')
+    })
+
+    it('5. clicking "Inspect live dashboard" invokes the onExplore callback', () => {
+      const exploreSpy = vi.fn()
+      let capturedTree: React.ReactNode = null
+
+      function Harness() {
+        capturedTree = DeveloperIntelligenceOverview({
+          data: sampleDashboardData,
+          isSample: true,
+          onExplore: exploreSpy,
+        })
+        return capturedTree
+      }
+
+      const html = renderToStaticMarkup(
+        React.createElement(Harness)
+      )
+      expect(html).toContain('Inspect live dashboard →')
+
+      const btn = findElementByClass(capturedTree, 'previewExploreBtn')
+      expect(btn).not.toBeNull()
+      expect(btn?.props?.children).toBe('Inspect live dashboard →')
+
+      // Trigger the click handler
+      btn?.props?.onClick?.()
+      expect(exploreSpy).toHaveBeenCalledTimes(1)
+
+      // Confirm that when onExplore is omitted, the button is not rendered
+      const noExploreHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: sampleDashboardData,
+          isSample: true,
+        })
+      )
+      expect(noExploreHtml).not.toContain('Inspect live dashboard →')
+    })
+
+    it('6. sampleDashboardData strictly conforms to Dashboard and DeveloperIntelligence structures and maintains star consistency', () => {
+      expect(sampleDashboardData.user.login).toBe('cgupta21')
+      expect(sampleDashboardData.user.public_repos).toBe(24)
+      expect(sampleDashboardData.user.followers).toBe(84)
+      expect(sampleDashboardData.repos).toHaveLength(24)
+      expect(sampleDashboardData.contributions.total).toBe(1842)
+      expect(sampleDashboardData.contributions.activeDays).toBe(62)
+      expect(sampleDashboardData.contributions.currentStreak).toBe(42)
+      expect(sampleDashboardData.contributions.longestStreak).toBe(68)
+      expect(sampleDashboardData.intelligence).toBeDefined()
+      expect(sampleDashboardData.intelligence?.schemaVersion).toBe('3.2.0')
+
+      // Star consistency: intelligence adoption value vs repository summation fallback
+      const declaredStars = sampleDashboardData.intelligence!.adoption.totalStargazersCount.value
+      const summedStars = sampleDashboardData.repos.reduce((sum, r) => sum + (r.stargazers_count || 0), 0)
+      expect(declaredStars).toBe(84)
+      expect(summedStars).toBe(84)
+      expect(summedStars).toBe(declaredStars)
+
+      // Forks consistency
+      const declaredForks = sampleDashboardData.intelligence!.adoption.forksCount.value
+      const summedForks = sampleDashboardData.repos.reduce((sum, r) => sum + (r.forks_count || 0), 0)
+      expect(declaredForks).toBe(18)
+      expect(summedForks).toBe(18)
+      expect(summedForks).toBe(declaredForks)
+
+      // Even if intelligence object is completely omitted, fallback calculation matches 84 stars
+      const noIntelligenceData: Dashboard = {
+        ...sampleDashboardData,
+        intelligence: undefined,
+      }
+      const fallbackHtml = renderToStaticMarkup(
+        React.createElement(DeveloperIntelligenceOverview, {
+          data: noIntelligenceData,
+          isSample: true,
+        })
+      )
+      expect(fallbackHtml).toContain('84 Stars')
     })
   })
 })

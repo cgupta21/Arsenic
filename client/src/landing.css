@@ -259,6 +259,29 @@
   gap: 12px;
   flex-wrap: wrap;
 }
+.previewWindowControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.previewWindowControls .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dotRed {
+  background: #e06c75;
+  opacity: 0.8;
+}
+.dotYellow {
+  background: #e5c07b;
+  opacity: 0.8;
+}
+.dotGreen {
+  background: #98c379;
+  opacity: 0.8;
+}
 .previewCardTitle {
   display: flex;
   align-items: center;
@@ -290,6 +313,15 @@
   border: 1px solid rgba(229, 211, 179, 0.2);
   padding: 4px 8px;
   border-radius: 4px;
+}
+.pulseIndicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sage);
+  display: inline-block;
+  box-shadow: 0 0 6px var(--sage);
+  animation: pulse 2s infinite ease-in-out;
 }
 .previewCardBody {
   padding: 24px;

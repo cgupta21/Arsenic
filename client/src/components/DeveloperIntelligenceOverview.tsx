@@ -6,6 +6,10 @@ import { compactNumber, topTiming } from '../lib/analytics'
 export interface DeveloperIntelligenceOverviewProps {
   data: Dashboard
   loading?: boolean
+  isSample?: boolean
+  sampleCaption?: string
+  onExplore?: () => void
+  className?: string
 }
 
 function getDensityLevelClass(day: { contributionCount: number; isObserved?: boolean } | null, eventsUnavailable?: boolean): string {
@@ -17,7 +21,14 @@ function getDensityLevelClass(day: { contributionCount: number; isObserved?: boo
   return 'lvl-4'
 }
 
-export function DeveloperIntelligenceOverview({ data, loading = false }: DeveloperIntelligenceOverviewProps) {
+export function DeveloperIntelligenceOverview({
+  data,
+  loading = false,
+  isSample = false,
+  sampleCaption,
+  onExplore,
+  className = '',
+}: DeveloperIntelligenceOverviewProps) {
   const user = data.user
   const intelligence = data.intelligence
   const repos = data.repos || []
@@ -179,11 +190,11 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
   }, [data, eventsUnavailable])
 
   return (
-    <div className="dashboardOverviewWrap">
+    <div className={`dashboardOverviewWrap ${isSample ? 'landingOverviewWrap' : ''}`}>
       <div
-        className={`dashboardPreviewCard liveOverviewCard ${loading ? 'overviewLoading' : ''}`}
-        aria-label="Developer Intelligence Overview"
-        id="developer-intelligence-overview"
+        className={`dashboardPreviewCard ${isSample ? 'landingPreviewCard' : 'liveOverviewCard'} ${loading ? 'overviewLoading' : ''} ${className}`.trim()}
+        aria-label={isSample ? 'Illustrative dashboard preview' : 'Developer Intelligence Overview'}
+        id={isSample ? 'landing-sample-dashboard' : 'developer-intelligence-overview'}
       >
         {/* Card Header with Window Controls, Context & Status */}
         <div className="previewCardHeader">
@@ -196,16 +207,17 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
             <FolderGit2 size={14} aria-hidden="true" />
             <span>
               @{user.login}
-              {primaryRepo ? ` / ${primaryRepo.name}` : ''}
+              {!isSample && primaryRepo ? ` / ${primaryRepo.name}` : ''}
             </span>
             <span className="previewStatusBadge">
-              {data.authenticated ? 'Authenticated' : 'Public API'} •{' '}
-              {hasActiveRepos ? 'Active' : repos.length === 0 ? 'No Repos' : 'Dormant'}
+              {isSample
+                ? 'Developer Profile • Active'
+                : `${data.authenticated ? 'Authenticated' : 'Public API'} • ${hasActiveRepos ? 'Active' : repos.length === 0 ? 'No Repos' : 'Dormant'}`}
             </span>
           </div>
           <div className="previewLivePill">
             <span className="pulseIndicator" aria-hidden="true" />
-            <span>{loading ? 'Refreshing Intelligence…' : 'Live Intelligence Overview'}</span>
+            <span>{isSample ? 'Sample analysis' : loading ? 'Refreshing Intelligence…' : 'Live Intelligence Overview'}</span>
           </div>
         </div>
 
@@ -417,31 +429,44 @@ export function DeveloperIntelligenceOverview({ data, loading = false }: Develop
         {/* Card Footer */}
         <div className="previewCardFooter">
           <span className="previewCaption">
-            Live developer intelligence for @{user.login} ·{' '}
-            {data.authenticated ? 'Authenticated GitHub data' : 'Public API mode'}
+            {isSample
+              ? (sampleCaption || `Sample analysis based on public developer metrics for @${user.login}`)
+              : `Live developer intelligence for @${user.login} · ${data.authenticated ? 'Authenticated GitHub data' : 'Public API mode'}`}
           </span>
-          <div className="previewFooterActions">
-            <a
-              href="#activity"
-              className="previewExploreBtn"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })
-              }}
-            >
-              Activity & Timing →
-            </a>
-            <a
-              href="#repositories"
-              className="previewExploreBtn"
-              onClick={(e) => {
-                e.preventDefault()
-                document.getElementById('repositories')?.scrollIntoView({ behavior: 'smooth' })
-              }}
-            >
-              Repositories ({repos.length}) →
-            </a>
-          </div>
+          {isSample ? (
+            onExplore && (
+              <button
+                type="button"
+                className="previewExploreBtn"
+                onClick={onExplore}
+              >
+                Inspect live dashboard →
+              </button>
+            )
+          ) : (
+            <div className="previewFooterActions">
+              <a
+                href="#activity"
+                className="previewExploreBtn"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('activity')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                Activity & Timing →
+              </a>
+              <a
+                href="#repositories"
+                className="previewExploreBtn"
+                onClick={(e) => {
+                  e.preventDefault()
+                  document.getElementById('repositories')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                Repositories ({repos.length}) →
+              </a>
+            </div>
+          )}
         </div>
       </div>
     </div>

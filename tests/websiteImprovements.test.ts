@@ -45,12 +45,11 @@ describe('Arsenic Website Improvements — SEO, Social Sharing, UX, Privacy & Fo
     it('all referenced favicon, icon, and preview assets exist with non-zero size', () => {
       const requiredAssets = [
         'public/assets/social-preview.png',
-        'public/social-preview.png',
+        'public/assets/favicon.svg',
+        'public/assets/icon-192.png',
+        'public/assets/icon-512.png',
         'public/favicon.ico',
-        'public/favicon.svg',
         'public/apple-touch-icon.png',
-        'public/icon-192.png',
-        'public/icon-512.png',
         'public/manifest.webmanifest',
       ]
       for (const assetRel of requiredAssets) {

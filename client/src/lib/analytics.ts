@@ -1,13 +1,5 @@
 import type { Dashboard } from '../types'
 
-export const palette = {
-  terracotta: '#C96A45',
-  sage: '#87966A',
-  sand: '#E5D3B3',
-  ink: '#11110F',
-  paper: '#F4EEE3',
-}
-
 export function clamp(value: number, min = 0, max = 100) {
   return Math.min(max, Math.max(min, Math.round(value)))
 }
@@ -85,13 +77,3 @@ export const compactNumber = (value: number | null | undefined) => {
   return new Intl.NumberFormat('en', { notation: value > 999 ? 'compact' : 'standard', maximumFractionDigits: 1 }).format(value)
 }
 export const formatDate = (value: string | null) => value ? new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—'
-
-export function eventText(event: Dashboard['events'][number]) {
-  const repo = event.repo.name.split('/')[1] || event.repo.name
-  if (event.type === 'PushEvent') return `Pushed code to ${repo}`
-  if (event.type === 'PullRequestEvent') return `${event.payload.action || 'Updated'} a pull request in ${repo}`
-  if (event.type === 'IssuesEvent') return `${event.payload.action || 'Updated'} an issue in ${repo}`
-  if (event.type === 'CreateEvent') return `Created something in ${repo}`
-  if (event.type === 'WatchEvent') return `Starred ${repo}`
-  return `Activity in ${repo}`
-}
